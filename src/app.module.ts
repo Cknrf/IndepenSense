@@ -7,6 +7,8 @@ import {
 import { AppService, WebService, RaspberryService } from './app.service';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { IntervalInformation } from './entities/interval_information.entity';
 
 @Module({
   imports: [
@@ -17,12 +19,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
       port: 3306,
       username: 'root',
       password: '',
-      database: 'solo_leveling_website',
-      entities: [],
+      database: 'indepensense',
+      entities: [IntervalInformation],
       synchronize: true,
+      retryAttempts: 3,
     }),
   ],
   controllers: [AppController, WebController, RaspberryController],
   providers: [AppService, WebService, RaspberryService],
 })
-export class AppModule {}
+export class AppModule {
+  constructor(private dataSource: DataSource) {}
+}
