@@ -6,16 +6,16 @@ export class IntervalInformation {
   id: number;
 
   @Column()
-  batteryHealth: string;
+  batteryHealth: number;
 
   @Column()
-  internetStatus: string;
+  internetStatus: boolean;
 
-  @Column()
-  latitude: string;
+  @Column({ type: 'double' })
+  latitude: number;
 
-  @Column()
-  longitude: string;
+  @Column({ type: 'double' })
+  longitude: number;
 
   @CreateDateColumn({ name: 'createdAt' })
   'createdAt': Date;

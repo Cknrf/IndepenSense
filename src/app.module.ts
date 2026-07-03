@@ -4,7 +4,7 @@ import {
   WebController,
   RaspberryController,
 } from './app.controller';
-import { AppService, WebService, RaspberryService } from './app.service';
+import { AppService, WebService, RaspberryService, LocationService } from './app.service';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -26,7 +26,7 @@ import { IntervalInformation } from './entities/interval_information.entity';
     }),
   ],
   controllers: [AppController, WebController, RaspberryController],
-  providers: [AppService, WebService, RaspberryService],
+  providers: [AppService, WebService, RaspberryService, LocationService],
 })
 export class AppModule {
   constructor(private dataSource: DataSource) {}

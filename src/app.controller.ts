@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Req, Res, Body} from '@nestjs/common';
-import { AppService, WebService, RaspberryService } from './app.service';
+import { AppService, WebService, RaspberryService, LocationService } from './app.service';
 import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { IntervalInformation } from './entities/interval_information.entity';
@@ -21,30 +21,27 @@ export class AppController {
 
 @Controller('web')
 export class WebController {
-  constructor(private readonly webService: WebService) {}
+  constructor(private readonly webService: WebService, private readonly locationService: LocationService) {}
 
-  @Get('battery-status')
-  getBatteryStatus(): string {
-    return this.webService.getBatteryStatus();
+   @Get('get-interval-information')
+  async getIntervalInformation() {
+    const data = await this.webService.getIntervalInformation();
+
+    const location = await this.locationService.reverseGeoCode(data[0].latitude, data[0].longitude);
+    return {...data[0], location};
   }
 }
 
 @Controller('raspberry')
 export class RaspberryController {
-  constructor(private readonly raspberryService: RaspberryService) {}
-
-  @Get('get-interval-information')
-  getIntervalInformation() {
-    console.log(this.raspberryService.getIntervalInformation());
-    return this.raspberryService.getIntervalInformation();
-  }
+  constructor(private readonly raspberryService: RaspberryService, private readonly locationService: LocationService) {}
 
   @Post('interval-information')
   sendIntervalInformation(@Body() createIntervalInformationDTO: CreateIntervalInformationDTO, @Req() req: Request ): string{
     console.log(createIntervalInformationDTO);
 
     this.raspberryService.sendIntervalInformation(createIntervalInformationDTO);
-    return "successful";
+    return 'successful';
   }
 
 }

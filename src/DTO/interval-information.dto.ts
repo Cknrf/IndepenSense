@@ -1,7 +1,7 @@
 export class CreateIntervalInformationDTO {
-  batteryHealth: string;
-  internetStatus: string;
-  latitude: string;
-  longitude: string;
+  batteryHealth: number;
+  internetStatus: boolean;
+  latitude: number;
+  longitude: number;
   createdAt: Date;
 }
