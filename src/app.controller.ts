@@ -8,6 +8,7 @@ import {
 import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateDeviceDTO } from './DTO/device.dto';
+import { CreateGuardianDTO } from './DTO/guardian.dto';
 
 @Controller('main')
 export class AppController {
@@ -41,11 +42,16 @@ export class WebController {
     return { ...data[0], location };
   }
 
-  @Get('device-confirmation')
+  @Post('device-confirmation')
   async confirmDevice(@Body() createDeviceDTO: CreateDeviceDTO) {
     const isValid = await this.webService.confirmDevice(createDeviceDTO.id);
     console.log(isValid);
     return isValid;
+  }
+
+  @Post('create-guardian-account')
+  async createGuardian(@Body() createGuardianDTO: CreateGuardianDTO) {
+    await this.webService.createGuardian(createGuardianDTO);
   }
 }
 

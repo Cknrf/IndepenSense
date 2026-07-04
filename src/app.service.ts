@@ -1,9 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
+import { CreateGuardianDTO } from './DTO/guardian.dto';
 import { DataSource } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
+import { Guardian } from './entities/guardian.entity';
 import { HttpService } from '@nestjs/axios';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AppService {
@@ -42,6 +45,28 @@ export class WebService {
     });
     if (device.length === 1) return true;
     return false;
+  }
+
+  async createGuardian(createGuardianDTO: CreateGuardianDTO) {
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(
+      createGuardianDTO.password,
+      saltRounds,
+    );
+    const deviceRepository = this.dataSource.getRepository(Guardian);
+
+    const device = deviceRepository.create({
+      name: createGuardianDTO.name,
+      role: createGuardianDTO.role,
+      contactNumber: createGuardianDTO.contactNumber,
+      email: createGuardianDTO.email,
+      username: createGuardianDTO.username,
+      passwordHash: passwordHash,
+    });
+
+    const result = await deviceRepository.save(device);
+
+    console.log(result);
   }
 }
 
