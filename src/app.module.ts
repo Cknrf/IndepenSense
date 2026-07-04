@@ -4,11 +4,19 @@ import {
   WebController,
   RaspberryController,
 } from './app.controller';
-import { AppService, WebService, RaspberryService, LocationService } from './app.service';
+import {
+  AppService,
+  WebService,
+  RaspberryService,
+  LocationService,
+} from './app.service';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
+import { Guardian } from './entities/guardian.entity';
+import { AssistedUser } from './entities/assisted_user.entity';
+import { Device } from './entities/device.entity';
 
 @Module({
   imports: [
@@ -20,7 +28,7 @@ import { IntervalInformation } from './entities/interval_information.entity';
       username: 'root',
       password: '',
       database: 'indepensense',
-      entities: [IntervalInformation],
+      entities: [IntervalInformation, Guardian, AssistedUser, Device],
       synchronize: true,
       retryAttempts: 3,
     }),
