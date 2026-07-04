@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { DataSource } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
+import { Device } from './entities/device.entity';
 import { HttpService } from '@nestjs/axios';
 
 @Injectable()
@@ -32,6 +33,15 @@ export class WebService {
       take: 1,
     });
     return intervalInformation;
+  }
+
+  async confirmDevice(id: string) {
+    const deviceRepository = this.dataSource.getRepository(Device);
+    const device = await deviceRepository.findBy({
+      id: id,
+    });
+    if (device.length === 1) return true;
+    return false;
   }
 }
 

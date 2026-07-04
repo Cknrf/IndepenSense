@@ -7,6 +7,7 @@ import {
 } from './app.service';
 import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
+import { CreateDeviceDTO } from './DTO/device.dto';
 
 @Controller('main')
 export class AppController {
@@ -38,6 +39,13 @@ export class WebController {
       data[0].longitude,
     );
     return { ...data[0], location };
+  }
+
+  @Get('device-confirmation')
+  async confirmDevice(@Body() createDeviceDTO: CreateDeviceDTO) {
+    const isValid = await this.webService.confirmDevice(createDeviceDTO.id);
+    console.log(isValid);
+    return isValid;
   }
 }
 
