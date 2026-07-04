@@ -31,10 +31,10 @@ export class Guardian {
   @Column()
   email: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, nullable: false })
   username: string;
 
-  @Column()
+  @Column({ nullable: false })
   passwordHash: string;
 
   @CreateDateColumn({ name: 'createdAt' })
