@@ -3,7 +3,10 @@ import {
   Column,
   CreateDateColumn,
   PrimaryGeneratedColumn,
+  OneToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Device } from './device.entity';
 
 @Entity()
 export class AssistedUser {
@@ -13,6 +16,10 @@ export class AssistedUser {
   @Column()
   name: string;
 
+  @OneToOne(() => Device)
+  @JoinColumn()
+  device: Device;
+
   @CreateDateColumn({ name: 'createdAt' })
-  'createdAt': Date;
+  createdAt: Date;
 }

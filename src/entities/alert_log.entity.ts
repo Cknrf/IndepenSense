@@ -32,5 +32,5 @@ export class AlertLog {
   assistedUser: AssistedUser;
 
   @Column()
-  timestamp: Date;
+  occuredAt: Date;
 }

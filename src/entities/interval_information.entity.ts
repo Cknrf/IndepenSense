@@ -18,5 +18,5 @@ export class IntervalInformation {
   longitude: number;
 
   @CreateDateColumn({ name: 'createdAt' })
-  'createdAt': Date;
+  createdAt: Date;
 }

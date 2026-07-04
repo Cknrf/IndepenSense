@@ -22,6 +22,15 @@ export class Guardian {
   @JoinTable()
   assistedUsers: AssistedUser[];
 
+  @Column()
+  role: string;
+
+  @Column()
+  contactNumber: string;
+
+  @Column()
+  email: string;
+
   @Column({ unique: true })
   username: string;
 
@@ -29,5 +38,5 @@ export class Guardian {
   passwordHash: string;
 
   @CreateDateColumn({ name: 'createdAt' })
-  'createdAt': Date;
+  createdAt: Date;
 }

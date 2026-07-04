@@ -7,7 +7,6 @@ import {
   OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { AssistedUser } from './assisted_user.entity';
 
 @Entity()
 export class Device {
@@ -17,10 +16,6 @@ export class Device {
   @Column()
   isRegistered: boolean;
 
-  @OneToOne(() => AssistedUser)
-  @JoinColumn()
-  assistedUser: AssistedUser;
-
-  @CreateDateColumn({ name: 'registeredAt' })
+  @Column({ name: 'registeredAt' })
   'registeredAt': Date;
 }
