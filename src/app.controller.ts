@@ -52,6 +52,7 @@ export class WebController {
   @Post('create-guardian-account')
   async createGuardian(@Body() createGuardianDTO: CreateGuardianDTO) {
     await this.webService.createGuardian(createGuardianDTO);
+    return { message: 'successfull' };
   }
 }
 
