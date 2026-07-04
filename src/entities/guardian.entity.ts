@@ -22,6 +22,12 @@ export class Guardian {
   @JoinTable()
   assistedUsers: AssistedUser[];
 
+  @Column({ unique: true })
+  username: string;
+
+  @Column()
+  passwordHash: string;
+
   @CreateDateColumn({ name: 'createdAt' })
   'createdAt': Date;
 }
