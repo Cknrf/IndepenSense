@@ -7,7 +7,6 @@ import {
 } from './app.service';
 import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
-import { IntervalInformation } from './entities/interval_information.entity';
 
 @Controller('main')
 export class AppController {
@@ -30,7 +29,7 @@ export class WebController {
     private readonly locationService: LocationService,
   ) {}
 
-  @Get('get-interval-information')
+  @Get('interval-information')
   async getIntervalInformation() {
     const data = await this.webService.getIntervalInformation();
 
