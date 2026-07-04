@@ -1,9 +1,13 @@
-import { Controller, Get, Post, Req, Res, Body} from '@nestjs/common';
-import { AppService, WebService, RaspberryService, LocationService } from './app.service';
+import { Controller, Get, Post, Req, Res, Body } from '@nestjs/common';
+import {
+  AppService,
+  WebService,
+  RaspberryService,
+  LocationService,
+} from './app.service';
 import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { IntervalInformation } from './entities/interval_information.entity';
-
 
 @Controller('main')
 export class AppController {
@@ -21,27 +25,38 @@ export class AppController {
 
 @Controller('web')
 export class WebController {
-  constructor(private readonly webService: WebService, private readonly locationService: LocationService) {}
+  constructor(
+    private readonly webService: WebService,
+    private readonly locationService: LocationService,
+  ) {}
 
-   @Get('get-interval-information')
+  @Get('get-interval-information')
   async getIntervalInformation() {
     const data = await this.webService.getIntervalInformation();
 
-    const location = await this.locationService.reverseGeoCode(data[0].latitude, data[0].longitude);
-    return {...data[0], location};
+    const location = await this.locationService.reverseGeoCode(
+      data[0].latitude,
+      data[0].longitude,
+    );
+    return { ...data[0], location };
   }
 }
 
 @Controller('raspberry')
 export class RaspberryController {
-  constructor(private readonly raspberryService: RaspberryService, private readonly locationService: LocationService) {}
+  constructor(
+    private readonly raspberryService: RaspberryService,
+    private readonly locationService: LocationService,
+  ) {}
 
   @Post('interval-information')
-  sendIntervalInformation(@Body() createIntervalInformationDTO: CreateIntervalInformationDTO, @Req() req: Request ): string{
+  sendIntervalInformation(
+    @Body() createIntervalInformationDTO: CreateIntervalInformationDTO,
+    @Req() req: Request,
+  ): string {
     console.log(createIntervalInformationDTO);
 
     this.raspberryService.sendIntervalInformation(createIntervalInformationDTO);
     return 'successful';
   }
-
 }
