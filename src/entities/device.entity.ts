@@ -12,7 +12,7 @@ import { AssistedUser } from './assisted_user.entity';
 @Entity()
 export class Device {
   @PrimaryGeneratedColumn('uuid')
-  id: number;
+  id: string;
 
   @Column()
   isRegistered: boolean;

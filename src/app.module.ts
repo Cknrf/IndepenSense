@@ -17,6 +17,7 @@ import { IntervalInformation } from './entities/interval_information.entity';
 import { Guardian } from './entities/guardian.entity';
 import { AssistedUser } from './entities/assisted_user.entity';
 import { Device } from './entities/device.entity';
+import { AlertLog } from './entities/alert_log.entity';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { Device } from './entities/device.entity';
       username: 'root',
       password: '',
       database: 'indepensense',
-      entities: [IntervalInformation, Guardian, AssistedUser, Device],
+      entities: [IntervalInformation, Guardian, AssistedUser, Device, AlertLog],
       synchronize: true,
       retryAttempts: 3,
     }),
