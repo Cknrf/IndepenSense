@@ -45,7 +45,7 @@ export class WebController {
   @Post('device-confirmation')
   async confirmDevice(@Body() createDeviceDTO: CreateDeviceDTO) {
     const isValid = await this.webService.confirmDevice(createDeviceDTO.id);
-    console.log(isValid);
+    console.log('Is device valid: ' + isValid);
     return isValid;
   }
 
@@ -53,6 +53,13 @@ export class WebController {
   async createGuardian(@Body() createGuardianDTO: CreateGuardianDTO) {
     await this.webService.createGuardian(createGuardianDTO);
     return { message: 'successfull' };
+  }
+
+  @Post('does-username-exist')
+  async doesUsernameExist(@Body() body: { username: string }) {
+    const result = await this.webService.doesUsernameExist(body.username);
+    console.log('Does user exist:' + result);
+    return result;
   }
 }
 

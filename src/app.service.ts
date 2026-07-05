@@ -53,9 +53,9 @@ export class WebService {
       createGuardianDTO.password,
       saltRounds,
     );
-    const deviceRepository = this.dataSource.getRepository(Guardian);
+    const guardianRepository = this.dataSource.getRepository(Guardian);
 
-    const device = deviceRepository.create({
+    const device = guardianRepository.create({
       name: createGuardianDTO.name,
       role: createGuardianDTO.role,
       contactNumber: createGuardianDTO.contactNumber,
@@ -64,9 +64,19 @@ export class WebService {
       passwordHash: passwordHash,
     });
 
-    const result = await deviceRepository.save(device);
+    const result = await guardianRepository.save(device);
+  }
 
-    console.log(result);
+  async doesUsernameExist(username: string) {
+    const guardianRepository = this.dataSource.getRepository(Guardian);
+
+    console.log(username);
+
+    const result = await guardianRepository.existsBy({
+      username: username,
+    });
+
+    return result;
   }
 }
 
