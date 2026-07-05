@@ -9,6 +9,7 @@ import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateDeviceDTO } from './DTO/device.dto';
 import { CreateGuardianDTO } from './DTO/guardian.dto';
+import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 
 @Controller('main')
 export class AppController {
@@ -51,8 +52,21 @@ export class WebController {
 
   @Post('create-guardian-account')
   async createGuardian(@Body() createGuardianDTO: CreateGuardianDTO) {
-    await this.webService.createGuardian(createGuardianDTO);
+    const result = await this.webService.createGuardian(createGuardianDTO);
     return { message: 'successfull' };
+  }
+
+  @Post('create-assisted-user-account')
+  async createAssistedUser(
+    @Body() createAssistedUserDTO: CreateAssistedUserDTO,
+  ) {
+    const result = await this.webService.createAssistedUser(
+      createAssistedUserDTO,
+    );
+    if (!result) {
+      return { message: 'account creation failed', status: false };
+    }
+    return { message: 'account creation successed', status: true };
   }
 
   @Post('does-username-exist')

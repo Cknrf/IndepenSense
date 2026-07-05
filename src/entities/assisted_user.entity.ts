@@ -16,7 +16,9 @@ export class AssistedUser {
   @Column()
   name: string;
 
-  @OneToOne(() => Device)
+  @OneToOne(() => Device, {
+    nullable: false,
+  })
   @JoinColumn()
   device: Device;
 

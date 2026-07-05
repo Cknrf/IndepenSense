@@ -1,10 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
+import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 import { CreateGuardianDTO } from './DTO/guardian.dto';
 import { DataSource } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
 import { Guardian } from './entities/guardian.entity';
+import { AssistedUser } from './entities/assisted_user.entity';
 import { HttpService } from '@nestjs/axios';
 import * as bcrypt from 'bcrypt';
 
@@ -47,6 +49,15 @@ export class WebService {
     return false;
   }
 
+  async getDevice(id: string) {
+    const deviceRepository = this.dataSource.getRepository(Device);
+    const device = await deviceRepository.findBy({
+      id: id,
+    });
+    if (device.length === 0) return false;
+    return device[0];
+  }
+
   async createGuardian(createGuardianDTO: CreateGuardianDTO) {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(
@@ -55,7 +66,7 @@ export class WebService {
     );
     const guardianRepository = this.dataSource.getRepository(Guardian);
 
-    const device = guardianRepository.create({
+    const guardian = guardianRepository.create({
       name: createGuardianDTO.name,
       role: createGuardianDTO.role,
       contactNumber: createGuardianDTO.contactNumber,
@@ -64,7 +75,31 @@ export class WebService {
       passwordHash: passwordHash,
     });
 
-    const result = await guardianRepository.save(device);
+    const result = await guardianRepository.save(guardian);
+    if (!result) {
+      return false;
+    }
+
+    return true;
+  }
+
+  async createAssistedUser(createAssistedUser: CreateAssistedUserDTO) {
+    const assistedUserRepository = this.dataSource.getRepository(AssistedUser);
+    const device = await this.getDevice(createAssistedUser.deviceID);
+    if (!device) {
+      return false;
+    }
+    const assistedUser = assistedUserRepository.create({
+      name: createAssistedUser.name,
+      device,
+    });
+
+    const result = await assistedUserRepository.save(assistedUser);
+    if (!result) {
+      return false;
+    }
+
+    return true;
   }
 
   async doesUsernameExist(username: string) {
