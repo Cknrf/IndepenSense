@@ -99,14 +99,12 @@ export class WebService {
     createAssistedUser: CreateAssistedUserDTO,
     guardianID: number,
   ) {
-    const assistedUserRepository = this.dataSource.getRepository(AssistedUser);
-    const guardianRepository = this.dataSource.getRepository(Guardian);
-
     const device = await this.getDevice(createAssistedUser.deviceID);
     if (!device) {
       return null;
     }
 
+    const guardianRepository = this.dataSource.getRepository(Guardian);
     const guardian = await guardianRepository.findOne({
       where: { id: guardianID },
       relations: { assistedUsers: true },
@@ -116,15 +114,20 @@ export class WebService {
     }
 
     try {
-      const assistedUser = await assistedUserRepository.save(
-        assistedUserRepository.create({
-          name: createAssistedUser.name,
-          device,
-        }),
-      );
-      guardian.assistedUsers = [...(guardian.assistedUsers ?? []), assistedUser];
-      await guardianRepository.save(guardian);
-      return { id: assistedUser.id, name: assistedUser.name };
+      return await this.dataSource.transaction(async (manager) => {
+        const assistedUser = await manager.save(
+          manager.create(AssistedUser, {
+            name: createAssistedUser.name,
+            device,
+          }),
+        );
+        guardian.assistedUsers = [
+          ...(guardian.assistedUsers ?? []),
+          assistedUser,
+        ];
+        await manager.save(guardian);
+        return { id: assistedUser.id, name: assistedUser.name };
+      });
     } catch (e) {
       console.error(e);
       return null;
