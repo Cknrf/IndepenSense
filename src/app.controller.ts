@@ -10,6 +10,7 @@ import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateDeviceDTO } from './DTO/device.dto';
 import { CreateGuardianDTO } from './DTO/guardian.dto';
 import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
+import { SignInDTO } from './DTO/signin.dto';
 
 @Controller('main')
 export class AppController {
@@ -74,6 +75,11 @@ export class WebController {
     const result = await this.webService.doesUsernameExist(body.username);
     console.log('Does user exist:' + result);
     return result;
+  }
+
+  @Post('signin')
+  async signIn(@Body() signInDTO: SignInDTO) {
+    return this.webService.signIn(signInDTO);
   }
 }
 

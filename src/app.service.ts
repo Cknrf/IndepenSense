@@ -1,7 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 import { CreateGuardianDTO } from './DTO/guardian.dto';
+import { SignInDTO } from './DTO/signin.dto';
 import { DataSource } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
@@ -112,6 +113,35 @@ export class WebService {
     });
 
     return result;
+  }
+
+  async signIn(signInDTO: SignInDTO) {
+    const guardianRepository = this.dataSource.getRepository(Guardian);
+    const guardian = await guardianRepository.findOne({
+      where: { username: signInDTO.username },
+      relations: { assistedUsers: true },
+    });
+
+    if (!guardian) {
+      throw new UnauthorizedException('invalid credentials');
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      signInDTO.password,
+      guardian.passwordHash,
+    );
+    if (!passwordMatches) {
+      throw new UnauthorizedException('invalid credentials');
+    }
+
+    return {
+      name: guardian.name,
+      assisstedUserID: guardian.assistedUsers?.[0]?.id ?? null,
+      role: guardian.role,
+      contactNumber: guardian.contactNumber,
+      email: guardian.email,
+      username: guardian.username,
+    };
   }
 }
 
