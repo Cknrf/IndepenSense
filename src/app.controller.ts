@@ -6,7 +6,9 @@ import {
   Res,
   Body,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
+import { SessionAuthGuard } from './guards/session-auth.guard';
 import {
   AppService,
   WebService,
@@ -41,6 +43,7 @@ export class WebController {
     private readonly locationService: LocationService,
   ) {}
 
+  @UseGuards(SessionAuthGuard)
   @Get('interval-information')
   async getIntervalInformation() {
     const data = await this.webService.getIntervalInformation();
@@ -65,6 +68,7 @@ export class WebController {
     return { message: 'successfull' };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('create-assisted-user-account')
   async createAssistedUser(
     @Body() createAssistedUserDTO: CreateAssistedUserDTO,
@@ -92,6 +96,7 @@ export class WebController {
     return guardian;
   }
 
+  @UseGuards(SessionAuthGuard)
   @Post('signout')
   async signOut(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await new Promise<void>((resolve, reject) => {
@@ -101,13 +106,10 @@ export class WebController {
     return { message: 'signed out' };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get('me')
   async me(@Req() req: Request) {
-    const guardianID = req.session.guardianID;
-    if (!guardianID) {
-      throw new UnauthorizedException('not signed in');
-    }
-    const guardian = await this.webService.getMe(guardianID);
+    const guardian = await this.webService.getMe(req.session.guardianID!);
     if (!guardian) {
       await new Promise<void>((resolve) => {
         req.session.destroy(() => resolve());
