@@ -78,8 +78,10 @@ export class WebController {
   }
 
   @Post('signin')
-  async signIn(@Body() signInDTO: SignInDTO) {
-    return this.webService.signIn(signInDTO);
+  async signIn(@Body() signInDTO: SignInDTO, @Req() req: Request) {
+    const { id, ...guardian } = await this.webService.signIn(signInDTO);
+    req.session.guardianID = id;
+    return guardian;
   }
 }
 

@@ -148,6 +148,7 @@ export class WebService {
     }
 
     return {
+      id: guardian.id,
       name: guardian.name,
       assisstedUserID: guardian.assistedUsers?.[0]?.id ?? null,
       role: guardian.role,
