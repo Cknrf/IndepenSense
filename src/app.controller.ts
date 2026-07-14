@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -47,6 +48,7 @@ export class WebController {
   @Get('interval-information')
   async getIntervalInformation() {
     const data = await this.webService.getIntervalInformation();
+    if (!data.length) return null;
 
     const location = await this.locationService.reverseGeoCode(
       data[0].latitude,
@@ -65,7 +67,10 @@ export class WebController {
   @Post('create-guardian-account')
   async createGuardian(@Body() createGuardianDTO: CreateGuardianDTO) {
     const result = await this.webService.createGuardian(createGuardianDTO);
-    return { message: 'successfull' };
+    if (!result) {
+      throw new BadRequestException('account creation failed');
+    }
+    return { message: 'account creation successed', status: true };
   }
 
   @UseGuards(SessionAuthGuard)
@@ -74,14 +79,14 @@ export class WebController {
     @Body() createAssistedUserDTO: CreateAssistedUserDTO,
     @Req() req: Request,
   ) {
-    const result = await this.webService.createAssistedUser(
+    const guardian = await this.webService.createAssistedUser(
       createAssistedUserDTO,
       req.session.guardianID!,
     );
-    if (!result) {
-      return { message: 'account creation failed', status: false };
+    if (!guardian) {
+      throw new BadRequestException('account creation failed');
     }
-    return { message: 'account creation successed', status: true };
+    return guardian;
   }
 
   @Post('does-username-exist')
@@ -98,7 +103,6 @@ export class WebController {
     return guardian;
   }
 
-  @UseGuards(SessionAuthGuard)
   @Post('signout')
   async signOut(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await new Promise<void>((resolve, reject) => {

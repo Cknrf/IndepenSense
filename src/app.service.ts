@@ -59,29 +59,37 @@ export class WebService {
     return device[0];
   }
 
+  private mapGuardian(guardian: Guardian) {
+    return {
+      name: guardian.name,
+      assisstedUserID: guardian.assistedUsers?.[0]?.id ?? null,
+      role: guardian.role,
+      contactNumber: guardian.contactNumber,
+      email: guardian.email,
+      username: guardian.username,
+    };
+  }
+
   async createGuardian(createGuardianDTO: CreateGuardianDTO) {
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(
-      createGuardianDTO.password,
-      saltRounds,
-    );
+    const passwordHash = await bcrypt.hash(createGuardianDTO.password, 10);
     const guardianRepository = this.dataSource.getRepository(Guardian);
 
-    const guardian = guardianRepository.create({
-      name: createGuardianDTO.name,
-      role: createGuardianDTO.role,
-      contactNumber: createGuardianDTO.contactNumber,
-      email: createGuardianDTO.email,
-      username: createGuardianDTO.username,
-      passwordHash: passwordHash,
-    });
-
-    const result = await guardianRepository.save(guardian);
-    if (!result) {
+    try {
+      await guardianRepository.save(
+        guardianRepository.create({
+          name: createGuardianDTO.name,
+          role: createGuardianDTO.role,
+          contactNumber: createGuardianDTO.contactNumber,
+          email: createGuardianDTO.email,
+          username: createGuardianDTO.username,
+          passwordHash: passwordHash,
+        }),
+      );
+      return true;
+    } catch (e) {
+      console.error(e);
       return false;
     }
-
-    return true;
   }
 
   async createAssistedUser(
@@ -93,7 +101,7 @@ export class WebService {
 
     const device = await this.getDevice(createAssistedUser.deviceID);
     if (!device) {
-      return false;
+      return null;
     }
 
     const guardian = await guardianRepository.findOne({
@@ -101,7 +109,7 @@ export class WebService {
       relations: { assistedUsers: true },
     });
     if (!guardian) {
-      return false;
+      return null;
     }
 
     const assistedUser = assistedUserRepository.create({
@@ -111,12 +119,18 @@ export class WebService {
 
     guardian.assistedUsers = [...(guardian.assistedUsers ?? []), assistedUser];
 
-    const result = await guardianRepository.save(guardian);
-    if (!result) {
-      return false;
+    try {
+      await guardianRepository.save(guardian);
+    } catch (e) {
+      console.error(e);
+      return null;
     }
 
-    return true;
+    const refreshed = await guardianRepository.findOne({
+      where: { id: guardianID },
+      relations: { assistedUsers: true },
+    });
+    return refreshed ? this.mapGuardian(refreshed) : null;
   }
 
   async doesUsernameExist(username: string) {
@@ -138,14 +152,7 @@ export class WebService {
       relations: { assistedUsers: true },
     });
     if (!guardian) return null;
-    return {
-      name: guardian.name,
-      assisstedUserID: guardian.assistedUsers?.[0]?.id ?? null,
-      role: guardian.role,
-      contactNumber: guardian.contactNumber,
-      email: guardian.email,
-      username: guardian.username,
-    };
+    return this.mapGuardian(guardian);
   }
 
   async signIn(signInDTO: SignInDTO) {
@@ -167,15 +174,7 @@ export class WebService {
       throw new UnauthorizedException('invalid credentials');
     }
 
-    return {
-      id: guardian.id,
-      name: guardian.name,
-      assisstedUserID: guardian.assistedUsers?.[0]?.id ?? null,
-      role: guardian.role,
-      contactNumber: guardian.contactNumber,
-      email: guardian.email,
-      username: guardian.username,
-    };
+    return { id: guardian.id, ...this.mapGuardian(guardian) };
   }
 }
 
