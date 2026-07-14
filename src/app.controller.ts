@@ -79,14 +79,14 @@ export class WebController {
     @Body() createAssistedUserDTO: CreateAssistedUserDTO,
     @Req() req: Request,
   ) {
-    const guardian = await this.webService.createAssistedUser(
+    const assistedUser = await this.webService.createAssistedUser(
       createAssistedUserDTO,
       req.session.guardianID!,
     );
-    if (!guardian) {
+    if (!assistedUser) {
       throw new BadRequestException('account creation failed');
     }
-    return guardian;
+    return assistedUser;
   }
 
   @Post('does-username-exist')

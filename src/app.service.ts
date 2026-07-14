@@ -115,25 +115,20 @@ export class WebService {
       return null;
     }
 
-    const assistedUser = assistedUserRepository.create({
-      name: createAssistedUser.name,
-      device,
-    });
-
-    guardian.assistedUsers = [...(guardian.assistedUsers ?? []), assistedUser];
-
     try {
+      const assistedUser = await assistedUserRepository.save(
+        assistedUserRepository.create({
+          name: createAssistedUser.name,
+          device,
+        }),
+      );
+      guardian.assistedUsers = [...(guardian.assistedUsers ?? []), assistedUser];
       await guardianRepository.save(guardian);
+      return { id: assistedUser.id, name: assistedUser.name };
     } catch (e) {
       console.error(e);
       return null;
     }
-
-    const refreshed = await guardianRepository.findOne({
-      where: { id: guardianID },
-      relations: { assistedUsers: true },
-    });
-    return refreshed ? this.mapGuardian(refreshed) : null;
   }
 
   async doesUsernameExist(username: string) {
