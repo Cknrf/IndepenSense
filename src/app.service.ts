@@ -86,16 +86,29 @@ export class WebService {
 
   async createAssistedUser(createAssistedUser: CreateAssistedUserDTO) {
     const assistedUserRepository = this.dataSource.getRepository(AssistedUser);
+    const guardianRepository = this.dataSource.getRepository(Guardian);
+
     const device = await this.getDevice(createAssistedUser.deviceID);
     if (!device) {
       return false;
     }
+
+    const guardian = await guardianRepository.findOne({
+      where: { id: createAssistedUser.guardianID },
+      relations: { assistedUsers: true },
+    });
+    if (!guardian) {
+      return false;
+    }
+
     const assistedUser = assistedUserRepository.create({
       name: createAssistedUser.name,
       device,
     });
 
-    const result = await assistedUserRepository.save(assistedUser);
+    guardian.assistedUsers = [...(guardian.assistedUsers ?? []), assistedUser];
+
+    const result = await guardianRepository.save(guardian);
     if (!result) {
       return false;
     }
