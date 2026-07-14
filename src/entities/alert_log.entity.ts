@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 import { AssistedUser } from './assisted_user.entity';
 
-enum EventType {
+export enum EventType {
   EMERGENCY = 'Emergency Alert',
   FALL = 'Fall Detection',
   BATTERY = 'Low Battery',

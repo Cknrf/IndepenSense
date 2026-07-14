@@ -47,6 +47,14 @@ export class WebController {
   ) {}
 
   @UseGuards(SessionAuthGuard)
+  @Get('alerts/:assistedUserID')
+  async getAlerts(
+    @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+  ) {
+    return this.webService.getAlerts(assistedUserID);
+  }
+
+  @UseGuards(SessionAuthGuard)
   @Get('interval-information/:assistedUserID')
   async getIntervalInformation(
     @Param('assistedUserID', ParseIntPipe) assistedUserID: number,

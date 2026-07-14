@@ -8,6 +8,7 @@ import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
 import { Guardian } from './entities/guardian.entity';
 import { AssistedUser } from './entities/assisted_user.entity';
+import { AlertLog } from './entities/alert_log.entity';
 import { HttpService } from '@nestjs/axios';
 import * as bcrypt from 'bcrypt';
 
@@ -27,6 +28,15 @@ export class WebService {
 
   getBatteryStatus(): string {
     return 'Battery status';
+  }
+
+  async getAlerts(assistedUserID: number) {
+    const alertLogRepository = this.dataSource.getRepository(AlertLog);
+    return alertLogRepository.find({
+      where: { assistedUser: { id: assistedUserID } },
+      order: { occuredAt: 'DESC' },
+      take: 5,
+    });
   }
 
   async getIntervalInformation(assistedUserID: number) {
