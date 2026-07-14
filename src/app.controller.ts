@@ -51,7 +51,17 @@ export class WebController {
   async getAlerts(
     @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
   ) {
-    return this.webService.getAlerts(assistedUserID);
+    const alerts = await this.webService.getAlerts(assistedUserID);
+
+    return Promise.all(
+      alerts.map(async (a) => ({
+        ...a,
+        location: await this.locationService.reverseGeoCode(
+          a.latitude,
+          a.longitude,
+        ),
+      })),
+    );
   }
 
   @UseGuards(SessionAuthGuard)
@@ -116,7 +126,10 @@ export class WebController {
   }
 
   @Post('signout')
-  async signOut(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async signOut(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     await new Promise<void>((resolve, reject) => {
       req.session.destroy((err) => (err ? reject(err) : resolve()));
     });
