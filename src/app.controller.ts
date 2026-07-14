@@ -83,6 +83,15 @@ export class WebController {
     req.session.guardianID = id;
     return guardian;
   }
+
+  @Post('signout')
+  async signOut(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    await new Promise<void>((resolve, reject) => {
+      req.session.destroy((err) => (err ? reject(err) : resolve()));
+    });
+    res.clearCookie('connect.sid');
+    return { message: 'signed out' };
+  }
 }
 
 @Controller('raspberry')
