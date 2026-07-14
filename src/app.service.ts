@@ -62,7 +62,10 @@ export class WebService {
   private mapGuardian(guardian: Guardian) {
     return {
       name: guardian.name,
-      assisstedUserID: guardian.assistedUsers?.[0]?.id ?? null,
+      assistedUsers: (guardian.assistedUsers ?? []).map((u) => ({
+        id: u.id,
+        name: u.name,
+      })),
       role: guardian.role,
       contactNumber: guardian.contactNumber,
       email: guardian.email,
