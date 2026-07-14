@@ -72,9 +72,11 @@ export class WebController {
   @Post('create-assisted-user-account')
   async createAssistedUser(
     @Body() createAssistedUserDTO: CreateAssistedUserDTO,
+    @Req() req: Request,
   ) {
     const result = await this.webService.createAssistedUser(
       createAssistedUserDTO,
+      req.session.guardianID!,
     );
     if (!result) {
       return { message: 'account creation failed', status: false };

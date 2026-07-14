@@ -84,7 +84,10 @@ export class WebService {
     return true;
   }
 
-  async createAssistedUser(createAssistedUser: CreateAssistedUserDTO) {
+  async createAssistedUser(
+    createAssistedUser: CreateAssistedUserDTO,
+    guardianID: number,
+  ) {
     const assistedUserRepository = this.dataSource.getRepository(AssistedUser);
     const guardianRepository = this.dataSource.getRepository(Guardian);
 
@@ -94,7 +97,7 @@ export class WebService {
     }
 
     const guardian = await guardianRepository.findOne({
-      where: { id: createAssistedUser.guardianID },
+      where: { id: guardianID },
       relations: { assistedUsers: true },
     });
     if (!guardian) {
