@@ -128,6 +128,23 @@ export class WebService {
     return result;
   }
 
+  async getMe(guardianID: number) {
+    const guardianRepository = this.dataSource.getRepository(Guardian);
+    const guardian = await guardianRepository.findOne({
+      where: { id: guardianID },
+      relations: { assistedUsers: true },
+    });
+    if (!guardian) return null;
+    return {
+      name: guardian.name,
+      assisstedUserID: guardian.assistedUsers?.[0]?.id ?? null,
+      role: guardian.role,
+      contactNumber: guardian.contactNumber,
+      email: guardian.email,
+      username: guardian.username,
+    };
+  }
+
   async signIn(signInDTO: SignInDTO) {
     const guardianRepository = this.dataSource.getRepository(Guardian);
     const guardian = await guardianRepository.findOne({

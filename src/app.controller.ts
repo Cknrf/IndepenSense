@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Req, Res, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  Body,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   AppService,
   WebService,
@@ -91,6 +99,22 @@ export class WebController {
     });
     res.clearCookie('connect.sid');
     return { message: 'signed out' };
+  }
+
+  @Get('me')
+  async me(@Req() req: Request) {
+    const guardianID = req.session.guardianID;
+    if (!guardianID) {
+      throw new UnauthorizedException('not signed in');
+    }
+    const guardian = await this.webService.getMe(guardianID);
+    if (!guardian) {
+      await new Promise<void>((resolve) => {
+        req.session.destroy(() => resolve());
+      });
+      throw new UnauthorizedException('not signed in');
+    }
+    return guardian;
   }
 }
 
