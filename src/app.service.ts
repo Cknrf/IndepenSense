@@ -29,13 +29,12 @@ export class WebService {
     return 'Battery status';
   }
 
-  async getIntervalInformation() {
+  async getIntervalInformation(assistedUserID: number) {
     const intervalInformationRepository =
       this.dataSource.getRepository(IntervalInformation);
     const intervalInformation = await intervalInformationRepository.find({
-      order: {
-        id: 'DESC',
-      },
+      where: { assistedUser: { id: assistedUserID } },
+      order: { id: 'DESC' },
       take: 1,
     });
     return intervalInformation;
@@ -190,8 +189,23 @@ export class RaspberryService {
   async sendIntervalInformation(
     createIntervalInformationDTO: CreateIntervalInformationDTO,
   ) {
+    const assistedUser = await this.dataSource
+      .getRepository(AssistedUser)
+      .findOne({
+        where: { device: { id: createIntervalInformationDTO.deviceID } },
+      });
+
+    if (!assistedUser) {
+      console.warn(
+        `Interval information from unlinked device: ${createIntervalInformationDTO.deviceID}`,
+      );
+      return false;
+    }
+
+    const { deviceID, ...rest } = createIntervalInformationDTO;
     const intervalInformation = new IntervalInformation();
-    Object.assign(intervalInformation, createIntervalInformationDTO);
+    Object.assign(intervalInformation, rest);
+    intervalInformation.assistedUser = assistedUser;
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -199,9 +213,11 @@ export class RaspberryService {
     try {
       await queryRunner.manager.save(intervalInformation);
       await queryRunner.commitTransaction();
+      return true;
     } catch (e) {
       console.error(e);
       await queryRunner.rollbackTransaction();
+      return false;
     } finally {
       await queryRunner.release();
     }

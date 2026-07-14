@@ -1,4 +1,5 @@
 export class CreateIntervalInformationDTO {
+  deviceID: string;
   batteryHealth: number;
   internetStatus: boolean;
   latitude: number;

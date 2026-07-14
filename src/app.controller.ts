@@ -6,6 +6,8 @@ import {
   Req,
   Res,
   Body,
+  Param,
+  ParseIntPipe,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -45,9 +47,11 @@ export class WebController {
   ) {}
 
   @UseGuards(SessionAuthGuard)
-  @Get('interval-information')
-  async getIntervalInformation() {
-    const data = await this.webService.getIntervalInformation();
+  @Get('interval-information/:assistedUserID')
+  async getIntervalInformation(
+    @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+  ) {
+    const data = await this.webService.getIntervalInformation(assistedUserID);
     if (!data.length) return null;
 
     const location = await this.locationService.reverseGeoCode(
@@ -134,13 +138,15 @@ export class RaspberryController {
   ) {}
 
   @Post('interval-information')
-  sendIntervalInformation(
+  async sendIntervalInformation(
     @Body() createIntervalInformationDTO: CreateIntervalInformationDTO,
-    @Req() req: Request,
-  ): string {
-    console.log(createIntervalInformationDTO);
-
-    this.raspberryService.sendIntervalInformation(createIntervalInformationDTO);
+  ) {
+    const ok = await this.raspberryService.sendIntervalInformation(
+      createIntervalInformationDTO,
+    );
+    if (!ok) {
+      throw new BadRequestException('unknown or unlinked device');
+    }
     return 'successful';
   }
 }
