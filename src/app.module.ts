@@ -10,6 +10,7 @@ import {
   RaspberryService,
   LocationService,
 } from './app.service';
+import { AlertsStreamService } from './services/alerts-stream.service';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -35,7 +36,13 @@ import { AlertLog } from './entities/alert_log.entity';
     }),
   ],
   controllers: [AppController, WebController, RaspberryController],
-  providers: [AppService, WebService, RaspberryService, LocationService],
+  providers: [
+    AppService,
+    WebService,
+    RaspberryService,
+    LocationService,
+    AlertsStreamService,
+  ],
 })
 export class AppModule {
   constructor(private dataSource: DataSource) {}

@@ -3,15 +3,18 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  MessageEvent,
   Post,
   Req,
   Res,
   Body,
   Param,
   ParseIntPipe,
+  Sse,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { SessionAuthGuard } from './guards/session-auth.guard';
 import {
   AppService,
@@ -19,12 +22,14 @@ import {
   RaspberryService,
   LocationService,
 } from './app.service';
+import { AlertsStreamService } from './services/alerts-stream.service';
 import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateDeviceDTO } from './DTO/device.dto';
 import { CreateGuardianDTO } from './DTO/guardian.dto';
 import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 import { SignInDTO } from './DTO/signin.dto';
+import { CreateAlertDTO } from './DTO/create-alert.dto';
 
 @Controller('main')
 export class AppController {
@@ -45,6 +50,7 @@ export class WebController {
   constructor(
     private readonly webService: WebService,
     private readonly locationService: LocationService,
+    private readonly alertsStreamService: AlertsStreamService,
   ) {}
 
   @UseGuards(SessionAuthGuard)
@@ -61,6 +67,19 @@ export class WebController {
     return contacts
       .filter((c) => c.id !== currentGuardianID)
       .map(({ id, ...rest }) => rest);
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Sse('alerts-stream/:assistedUserID')
+  async streamAlerts(
+    @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+    @Req() req: Request,
+  ): Promise<Observable<MessageEvent>> {
+    const contacts = await this.webService.getContacts(assistedUserID);
+    if (!contacts.some((c) => c.id === req.session.guardianID)) {
+      throw new ForbiddenException();
+    }
+    return this.alertsStreamService.subscribe(assistedUserID);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -198,6 +217,15 @@ export class RaspberryController {
     const ok = await this.raspberryService.sendIntervalInformation(
       createIntervalInformationDTO,
     );
+    if (!ok) {
+      throw new BadRequestException('unknown or unlinked device');
+    }
+    return 'successful';
+  }
+
+  @Post('alert')
+  async sendAlert(@Body() dto: CreateAlertDTO) {
+    const ok = await this.raspberryService.sendAlert(dto);
     if (!ok) {
       throw new BadRequestException('unknown or unlinked device');
     }

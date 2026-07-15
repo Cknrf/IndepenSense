@@ -8,6 +8,8 @@ import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 import { CreateGuardianDTO } from './DTO/guardian.dto';
 import { SignInDTO } from './DTO/signin.dto';
+import { CreateAlertDTO } from './DTO/create-alert.dto';
+import { AlertsStreamService } from './services/alerts-stream.service';
 import { DataSource } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
@@ -238,10 +240,47 @@ export class WebService {
 
 @Injectable()
 export class RaspberryService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly alertsStreamService: AlertsStreamService,
+    private readonly locationService: LocationService,
+  ) {}
 
   sendBatteryStatus(): string {
     return 'Battery status';
+  }
+
+  async sendAlert(dto: CreateAlertDTO) {
+    const assistedUser = await this.dataSource
+      .getRepository(AssistedUser)
+      .findOne({ where: { device: { id: dto.deviceID } } });
+    if (!assistedUser) {
+      console.warn(`Alert from unlinked device: ${dto.deviceID}`);
+      return false;
+    }
+
+    const { deviceID, ...rest } = dto;
+    const alert = new AlertLog();
+    Object.assign(alert, rest);
+    alert.assistedUser = assistedUser;
+
+    const saved = await this.dataSource.getRepository(AlertLog).save(alert);
+
+    const location = await this.locationService.reverseGeoCode(
+      saved.latitude,
+      saved.longitude,
+    );
+
+    this.alertsStreamService.publish(assistedUser.id, {
+      id: saved.id,
+      eventType: saved.eventType,
+      latitude: saved.latitude,
+      longitude: saved.longitude,
+      occuredAt: saved.occuredAt,
+      location,
+    });
+
+    return true;
   }
 
   async sendIntervalInformation(
