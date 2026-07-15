@@ -53,11 +53,14 @@ export class WebController {
     @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
     @Req() req: Request,
   ) {
+    const currentGuardianID = req.session.guardianID;
     const contacts = await this.webService.getContacts(assistedUserID);
-    if (!contacts.some((c) => c.id === req.session.guardianID)) {
+    if (!contacts.some((c) => c.id === currentGuardianID)) {
       throw new ForbiddenException();
     }
-    return contacts.map(({ id, ...rest }) => rest);
+    return contacts
+      .filter((c) => c.id !== currentGuardianID)
+      .map(({ id, ...rest }) => rest);
   }
 
   @UseGuards(SessionAuthGuard)
