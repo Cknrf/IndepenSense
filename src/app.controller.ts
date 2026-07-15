@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Req,
@@ -45,6 +46,19 @@ export class WebController {
     private readonly webService: WebService,
     private readonly locationService: LocationService,
   ) {}
+
+  @UseGuards(SessionAuthGuard)
+  @Get('contacts/:assistedUserID')
+  async getContacts(
+    @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+    @Req() req: Request,
+  ) {
+    const contacts = await this.webService.getContacts(assistedUserID);
+    if (!contacts.some((c) => c.id === req.session.guardianID)) {
+      throw new ForbiddenException();
+    }
+    return contacts.map(({ id, ...rest }) => rest);
+  }
 
   @UseGuards(SessionAuthGuard)
   @Get('alerts/:assistedUserID')

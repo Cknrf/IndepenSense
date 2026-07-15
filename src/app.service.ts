@@ -30,6 +30,19 @@ export class WebService {
     return 'Battery status';
   }
 
+  async getContacts(assistedUserID: number) {
+    const guardianRepository = this.dataSource.getRepository(Guardian);
+    const guardians = await guardianRepository.find({
+      where: { assistedUsers: { id: assistedUserID } },
+    });
+    return guardians.map((g) => ({
+      id: g.id,
+      name: g.name,
+      role: g.role,
+      contactNumber: g.contactNumber,
+    }));
+  }
+
   async getAlerts(assistedUserID: number) {
     const alertLogRepository = this.dataSource.getRepository(AlertLog);
     return alertLogRepository.find({
