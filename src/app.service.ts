@@ -239,6 +239,28 @@ export class WebService {
 }
 
 @Injectable()
+export class LocationService {
+  async reverseGeoCode(latitude: number, longitude: number): Promise<String> {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=jsonv2`,
+      {
+        headers: {
+          'User-Agent': 'MyRaspberryApp/1.0 mearckfrancisvoughnlol@gmail.com',
+        },
+      },
+    );
+
+    if (!response.ok) {
+      console.log(response.status);
+      return 'unable to retrieve location';
+    }
+
+    const data = await response.json();
+    return data.name;
+  }
+}
+
+@Injectable()
 export class RaspberryService {
   constructor(
     private readonly dataSource: DataSource,
@@ -321,24 +343,3 @@ export class RaspberryService {
   }
 }
 
-@Injectable()
-export class LocationService {
-  async reverseGeoCode(latitude: number, longitude: number): Promise<String> {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=jsonv2`,
-      {
-        headers: {
-          'User-Agent': 'MyRaspberryApp/1.0 mearckfrancisvoughnlol@gmail.com',
-        },
-      },
-    );
-
-    if (!response.ok) {
-      console.log(response.status);
-      return 'unable to retrieve location';
-    }
-
-    const data = await response.json();
-    return data.name;
-  }
-}
