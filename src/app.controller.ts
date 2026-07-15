@@ -113,6 +113,22 @@ export class WebController {
   }
 
   @UseGuards(SessionAuthGuard)
+  @Post('link-assisted-user-account')
+  async linkAssistedUser(
+    @Body() body: { deviceID: string },
+    @Req() req: Request,
+  ) {
+    const assistedUser = await this.webService.linkAssistedUser(
+      body.deviceID,
+      req.session.guardianID!,
+    );
+    if (!assistedUser) {
+      throw new BadRequestException('unable to link');
+    }
+    return assistedUser;
+  }
+
+  @UseGuards(SessionAuthGuard)
   @Post('create-assisted-user-account')
   async createAssistedUser(
     @Body() createAssistedUserDTO: CreateAssistedUserDTO,

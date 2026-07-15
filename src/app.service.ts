@@ -1,4 +1,9 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 import { CreateGuardianDTO } from './DTO/guardian.dto';
@@ -114,6 +119,36 @@ export class WebService {
     } catch (e) {
       console.error(e);
       return false;
+    }
+  }
+
+  async linkAssistedUser(deviceID: string, guardianID: number) {
+    const assistedUserRepository = this.dataSource.getRepository(AssistedUser);
+    const guardianRepository = this.dataSource.getRepository(Guardian);
+
+    const assistedUser = await assistedUserRepository.findOne({
+      where: { device: { id: deviceID } },
+    });
+    if (!assistedUser) return null;
+
+    const guardian = await guardianRepository.findOne({
+      where: { id: guardianID },
+      relations: { assistedUsers: true },
+    });
+    if (!guardian) return null;
+
+    if (guardian.assistedUsers.some((u) => u.id === assistedUser.id)) {
+      throw new ConflictException('assisted user already linked');
+    }
+
+    guardian.assistedUsers = [...guardian.assistedUsers, assistedUser];
+
+    try {
+      await guardianRepository.save(guardian);
+      return { id: assistedUser.id, name: assistedUser.name };
+    } catch (e) {
+      console.error(e);
+      return null;
     }
   }
 
