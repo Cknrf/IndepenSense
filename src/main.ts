@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';
 import session from 'express-session';
 import MySQLStoreFactory from 'express-mysql-session';
+import { runSeed } from './seed';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -15,6 +16,12 @@ async function bootstrap() {
   }
 
   const dataSource = app.get(DataSource);
+
+  if (process.env.SEEDDATA === 'true') {
+    console.log('SEEDDATA=true → running seed on boot');
+    await runSeed(dataSource);
+  }
+
   const pool = (dataSource.driver as any).pool;
 
   const MySQLStore = MySQLStoreFactory(session as any);
