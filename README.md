@@ -31,6 +31,44 @@
 $ npm install
 ```
 
+## Push notifications
+
+Alerts are delivered to guardians over two transports: FCM for the Capacitor
+Android shell, and Web Push for browsers. Both are optional — the server logs a
+warning and skips that transport when its config is absent.
+
+| Variable | Required for | Notes |
+| --- | --- | --- |
+| `FIREBASE_SERVICE_ACCOUNT` | FCM | Service account JSON, raw or base64. **Secret.** |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | FCM | Alternative to the above: path to a mounted JSON file. |
+| `VAPID_PUBLIC_KEY` | Web Push | Served publicly from `GET /web/push/vapid-key`. |
+| `VAPID_PRIVATE_KEY` | Web Push | **Secret.** |
+| `VAPID_SUBJECT` | Web Push | `mailto:` or `https:` URL you control. Defaults to the project contact address. |
+
+Generate the VAPID pair once and reuse it — rotating it invalidates every
+existing browser subscription:
+
+```bash
+$ npx web-push generate-vapid-keys
+```
+
+The FCM leg uses the HTTP v1 API, which authenticates with an OAuth2 token
+minted from the service account. The legacy server-key API was shut down in
+2024 and is not supported.
+
+Endpoints:
+
+- `POST /web/push/register` — `{ platform, token }`, upserts and binds the token
+  to the signed-in guardian. Re-registering a token under a different guardian
+  moves it, so a device handed between accounts stops alerting the old owner.
+- `DELETE /web/push/register` — same body; removes the token if the caller owns it.
+- `GET /web/push/vapid-key` — public, unauthenticated.
+
+Tokens are bound to the guardian rather than to an assisted user: when the app
+is closed there is no active selection, and a guardian must be woken for any of
+the people they watch. Dead tokens are pruned automatically when a transport
+reports them gone (FCM `UNREGISTERED` or 404; Web Push 404 or 410).
+
 ## Compile and run the project
 
 ```bash

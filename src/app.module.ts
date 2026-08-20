@@ -11,6 +11,7 @@ import {
   LocationService,
 } from './app.service';
 import { AlertsStreamService } from './services/alerts-stream.service';
+import { PushService } from './services/push.service';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -19,6 +20,7 @@ import { Guardian } from './entities/guardian.entity';
 import { AssistedUser } from './entities/assisted_user.entity';
 import { Device } from './entities/device.entity';
 import { AlertLog } from './entities/alert_log.entity';
+import { DeviceToken } from './entities/device_token.entity';
 
 @Module({
   imports: [
@@ -30,7 +32,14 @@ import { AlertLog } from './entities/alert_log.entity';
       username: process.env.MYSQLUSER ?? 'root',
       password: process.env.MYSQLPASSWORD ?? '',
       database: process.env.MYSQLDATABASE ?? 'indepensense',
-      entities: [IntervalInformation, Guardian, AssistedUser, Device, AlertLog],
+      entities: [
+        IntervalInformation,
+        Guardian,
+        AssistedUser,
+        Device,
+        AlertLog,
+        DeviceToken,
+      ],
       synchronize: process.env.NODE_ENV !== 'production',
       retryAttempts: 10,
     }),
@@ -42,6 +51,7 @@ import { AlertLog } from './entities/alert_log.entity';
     RaspberryService,
     LocationService,
     AlertsStreamService,
+    PushService,
   ],
 })
 export class AppModule {

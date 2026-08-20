@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
+  HttpCode,
   MessageEvent,
   Post,
   Req,
@@ -23,6 +25,7 @@ import {
   LocationService,
 } from './app.service';
 import { AlertsStreamService } from './services/alerts-stream.service';
+import { PushService } from './services/push.service';
 import type { Request, Response } from 'express';
 import { CreateIntervalInformationDTO } from './DTO/interval-information.dto';
 import { CreateDeviceDTO } from './DTO/device.dto';
@@ -30,6 +33,7 @@ import { CreateGuardianDTO } from './DTO/guardian.dto';
 import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 import { SignInDTO } from './DTO/signin.dto';
 import { CreateAlertDTO } from './DTO/create-alert.dto';
+import { PushTokenDTO } from './DTO/push-token.dto';
 
 @Controller('main')
 export class AppController {
@@ -51,6 +55,7 @@ export class WebController {
     private readonly webService: WebService,
     private readonly locationService: LocationService,
     private readonly alertsStreamService: AlertsStreamService,
+    private readonly pushService: PushService,
   ) {}
 
   @UseGuards(SessionAuthGuard)
@@ -200,6 +205,33 @@ export class WebController {
       throw new UnauthorizedException('not signed in');
     }
     return guardian;
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('push/register')
+  @HttpCode(204)
+  async registerPushToken(
+    @Body() pushTokenDTO: PushTokenDTO,
+    @Req() req: Request,
+  ) {
+    await this.pushService.register(req.session.guardianID!, pushTokenDTO);
+  }
+
+  // The client sends the token in the body of the DELETE, not in the query.
+  @UseGuards(SessionAuthGuard)
+  @Delete('push/register')
+  @HttpCode(204)
+  async unregisterPushToken(
+    @Body() pushTokenDTO: PushTokenDTO,
+    @Req() req: Request,
+  ) {
+    await this.pushService.unregister(req.session.guardianID!, pushTokenDTO);
+  }
+
+  // Public value: the browser needs it to subscribe, before it has a session.
+  @Get('push/vapid-key')
+  getVapidKey() {
+    return { publicKey: this.pushService.getVapidPublicKey() };
   }
 }
 

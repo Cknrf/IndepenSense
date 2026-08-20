@@ -10,6 +10,7 @@ import { CreateGuardianDTO } from './DTO/guardian.dto';
 import { SignInDTO } from './DTO/signin.dto';
 import { CreateAlertDTO } from './DTO/create-alert.dto';
 import { AlertsStreamService } from './services/alerts-stream.service';
+import { PushService } from './services/push.service';
 import { DataSource } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
@@ -266,6 +267,7 @@ export class RaspberryService {
     private readonly dataSource: DataSource,
     private readonly alertsStreamService: AlertsStreamService,
     private readonly locationService: LocationService,
+    private readonly pushService: PushService,
   ) {}
 
   sendBatteryStatus(): string {
@@ -301,6 +303,24 @@ export class RaspberryService {
       occuredAt: saved.occuredAt,
       location,
     });
+
+    // The SSE stream only reaches an open page. Push wakes every guardian of
+    // this assisted user, whichever of their people they happen to be viewing.
+    const guardians = await this.dataSource.getRepository(Guardian).find({
+      where: { assistedUsers: { id: assistedUser.id } },
+      select: { id: true },
+    });
+
+    await Promise.all(
+      guardians.map((guardian) =>
+        this.pushService.sendAlertPush(guardian.id, {
+          alertId: saved.id,
+          assistedUserId: assistedUser.id,
+          eventType: saved.eventType,
+          location: String(location ?? ''),
+        }),
+      ),
+    );
 
     return true;
   }
