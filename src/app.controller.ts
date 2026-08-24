@@ -255,6 +255,18 @@ export class RaspberryController {
     return 'successful';
   }
 
+  // Unauthenticated and identified by deviceID, like the other /raspberry/*
+  // routes: the device has no session. No ParseUUIDPipe, so a malformed ID
+  // gets the same 'unknown or unlinked device' as an unknown one.
+  @Get('guardians/:deviceID')
+  async getGuardians(@Param('deviceID') deviceID: string) {
+    const guardians = await this.raspberryService.getGuardianContacts(deviceID);
+    if (!guardians) {
+      throw new BadRequestException('unknown or unlinked device');
+    }
+    return { guardians };
+  }
+
   @Post('alert')
   async sendAlert(@Body() dto: CreateAlertDTO) {
     const ok = await this.raspberryService.sendAlert(dto);

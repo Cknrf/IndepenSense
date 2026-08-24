@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -18,6 +19,7 @@ import { Guardian } from './entities/guardian.entity';
 import { AssistedUser } from './entities/assisted_user.entity';
 import { AlertLog } from './entities/alert_log.entity';
 import { HttpService } from '@nestjs/axios';
+import { normalizeE164 } from './utils/phone';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -104,6 +106,15 @@ export class WebService {
   }
 
   async createGuardian(createGuardianDTO: CreateGuardianDTO) {
+    // Store E.164 or nothing: this number is what the wearable dials for
+    // emergency SMS, and the modem fails silently on any other format.
+    const contactNumber = normalizeE164(createGuardianDTO.contactNumber);
+    if (!contactNumber) {
+      throw new BadRequestException(
+        'contactNumber must be a mobile number that can receive SMS, e.g. 09171234567 or +639171234567',
+      );
+    }
+
     const passwordHash = await bcrypt.hash(createGuardianDTO.password, 10);
     const guardianRepository = this.dataSource.getRepository(Guardian);
 
@@ -112,7 +123,7 @@ export class WebService {
         guardianRepository.create({
           name: createGuardianDTO.name,
           role: createGuardianDTO.role,
-          contactNumber: createGuardianDTO.contactNumber,
+          contactNumber: contactNumber,
           email: createGuardianDTO.email,
           username: createGuardianDTO.username,
           passwordHash: passwordHash,
@@ -265,6 +276,7 @@ export class LocationService {
 export class RaspberryService {
   constructor(
     private readonly dataSource: DataSource,
+    private readonly webService: WebService,
     private readonly alertsStreamService: AlertsStreamService,
     private readonly locationService: LocationService,
     private readonly pushService: PushService,
@@ -272,6 +284,46 @@ export class RaspberryService {
 
   sendBatteryStatus(): string {
     return 'Battery status';
+  }
+
+  /**
+   * The numbers the device texts when an alert fires. It is fetched once at
+   * startup and cached to disk, because it is needed exactly when the device
+   * has no data connection.
+   *
+   * Returns null for an unknown device or one with no linked assisted user;
+   * an assisted user with no guardians yet is an empty list, not an error.
+   */
+  async getGuardianContacts(deviceID: string) {
+    const assistedUser = await this.dataSource
+      .getRepository(AssistedUser)
+      .findOne({ where: { device: { id: deviceID } } });
+    if (!assistedUser) {
+      console.warn(`Guardian lookup from unlinked device: ${deviceID}`);
+      return null;
+    }
+
+    const contacts = await this.webService.getContacts(assistedUser.id);
+
+    // Explicit allowlist, not a blocklist: this response is written to a
+    // plaintext cache file on a device that could be lost or stolen, so any
+    // field later added to getContacts must not leak by default.
+    return contacts.map((c) => {
+      // Rows created before contactNumber was validated may not be E.164.
+      // Repair what is repairable; pass anything else through untouched and
+      // let the device's own normalisation make the final call.
+      const normalized = normalizeE164(c.contactNumber);
+      if (!normalized) {
+        console.warn(
+          `Guardian ${c.id} has a non-E.164 contactNumber; the device may be unable to text them`,
+        );
+      }
+      return {
+        name: c.name,
+        contactNumber: normalized ?? c.contactNumber,
+        role: c.role,
+      };
+    });
   }
 
   async sendAlert(dto: CreateAlertDTO) {
