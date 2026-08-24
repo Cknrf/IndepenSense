@@ -16,7 +16,7 @@ const GUARDIANS = [
     password: 'password123',
     name: 'Alice Guardian',
     role: 'Parent',
-    contactNumber: '+358401111111',
+    contactNumber: '+639171111111',
     email: 'alice@example.com',
     linkAssistedUser: true,
   },
@@ -25,7 +25,7 @@ const GUARDIANS = [
     password: 'password123',
     name: 'Bob Guardian',
     role: 'Sibling',
-    contactNumber: '+358402222222',
+    contactNumber: '+639182222222',
     email: 'bob@example.com',
     linkAssistedUser: false,
   },
@@ -77,10 +77,10 @@ export async function runSeed(dataSource: DataSource) {
     const now = Date.now();
     const minute = 60 * 1000;
     const intervals = [
-      { minutesAgo: 30, batteryHealth: 92, internetStatus: true, latitude: 60.1699, longitude: 24.9384 },
-      { minutesAgo: 20, batteryHealth: 78, internetStatus: true, latitude: 60.1705, longitude: 24.9401 },
-      { minutesAgo: 10, batteryHealth: 65, internetStatus: false, latitude: 60.1712, longitude: 24.9425 },
-      { minutesAgo: 2, batteryHealth: 18, internetStatus: true, latitude: 60.1720, longitude: 24.9450 },
+      { minutesAgo: 30, batteryHealth: 92, internetStatus: true, latitude: 14.5995, longitude: 120.9842 },
+      { minutesAgo: 20, batteryHealth: 78, internetStatus: true, latitude: 14.6001, longitude: 120.9858 },
+      { minutesAgo: 10, batteryHealth: 65, internetStatus: false, latitude: 14.6008, longitude: 120.9871 },
+      { minutesAgo: 2, batteryHealth: 18, internetStatus: true, latitude: 14.6016, longitude: 120.9890 },
     ];
     for (const i of intervals) {
       const saved = await intervalRepo.save(
@@ -108,9 +108,9 @@ export async function runSeed(dataSource: DataSource) {
     const now = Date.now();
     const minute = 60 * 1000;
     const alerts = [
-      { minutesAgo: 45, eventType: EventType.FALL, latitude: 60.1699, longitude: 24.9384 },
-      { minutesAgo: 25, eventType: EventType.CONNECTIVITY, latitude: 60.1705, longitude: 24.9401 },
-      { minutesAgo: 5, eventType: EventType.BATTERY, latitude: 60.1720, longitude: 24.9450 },
+      { minutesAgo: 45, eventType: EventType.FALL, latitude: 14.5995, longitude: 120.9842 },
+      { minutesAgo: 25, eventType: EventType.CONNECTIVITY, latitude: 14.6001, longitude: 120.9858 },
+      { minutesAgo: 5, eventType: EventType.BATTERY, latitude: 14.6016, longitude: 120.9890 },
     ];
     for (const a of alerts) {
       await alertRepo.save(
