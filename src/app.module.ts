@@ -12,6 +12,7 @@ import {
 } from './app.service';
 import { AlertsStreamService } from './services/alerts-stream.service';
 import { PushService } from './services/push.service';
+import { DeviceAuthGuard } from './guards/device-auth.guard';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -52,6 +53,7 @@ import { DeviceToken } from './entities/device_token.entity';
     LocationService,
     AlertsStreamService,
     PushService,
+    DeviceAuthGuard,
   ],
 })
 export class AppModule {

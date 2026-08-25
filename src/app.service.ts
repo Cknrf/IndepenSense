@@ -326,18 +326,17 @@ export class RaspberryService {
     });
   }
 
-  async sendAlert(dto: CreateAlertDTO) {
+  async sendAlert(deviceID: string, dto: CreateAlertDTO) {
     const assistedUser = await this.dataSource
       .getRepository(AssistedUser)
-      .findOne({ where: { device: { id: dto.deviceID } } });
+      .findOne({ where: { device: { id: deviceID } } });
     if (!assistedUser) {
-      console.warn(`Alert from unlinked device: ${dto.deviceID}`);
+      console.warn(`Alert from unlinked device: ${deviceID}`);
       return false;
     }
 
-    const { deviceID, ...rest } = dto;
     const alert = new AlertLog();
-    Object.assign(alert, rest);
+    Object.assign(alert, dto);
     alert.assistedUser = assistedUser;
 
     const saved = await this.dataSource.getRepository(AlertLog).save(alert);
@@ -378,24 +377,22 @@ export class RaspberryService {
   }
 
   async sendIntervalInformation(
+    deviceID: string,
     createIntervalInformationDTO: CreateIntervalInformationDTO,
   ) {
     const assistedUser = await this.dataSource
       .getRepository(AssistedUser)
       .findOne({
-        where: { device: { id: createIntervalInformationDTO.deviceID } },
+        where: { device: { id: deviceID } },
       });
 
     if (!assistedUser) {
-      console.warn(
-        `Interval information from unlinked device: ${createIntervalInformationDTO.deviceID}`,
-      );
+      console.warn(`Interval information from unlinked device: ${deviceID}`);
       return false;
     }
 
-    const { deviceID, ...rest } = createIntervalInformationDTO;
     const intervalInformation = new IntervalInformation();
-    Object.assign(intervalInformation, rest);
+    Object.assign(intervalInformation, createIntervalInformationDTO);
     intervalInformation.assistedUser = assistedUser;
 
     const queryRunner = this.dataSource.createQueryRunner();

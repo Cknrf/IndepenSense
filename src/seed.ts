@@ -7,8 +7,15 @@ import { AssistedUser } from './entities/assisted_user.entity';
 import { Device } from './entities/device.entity';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { AlertLog, EventType } from './entities/alert_log.entity';
+import { hashPairingCode, sha256Hex } from './utils/device-credentials';
 
 const SEED_DEVICE_ID = '00000000-0000-0000-0000-000000000001';
+
+// Fixed so a dev machine can hardcode it and a teammate can reproduce it. Real
+// units get unpredictable values from `npm run provision`; this one is only
+// ever as safe as the seeded guardian passwords sitting above it.
+const SEED_DEVICE_SECRET = 'dev-device-secret-not-for-real-hardware';
+const SEED_PAIRING_CODE = 'DEV0-DEV0-DEV0';
 
 const GUARDIANS = [
   {
@@ -53,6 +60,14 @@ export async function runSeed(dataSource: DataSource) {
   } else {
     console.log(`device ${device.id} already exists — skipping`);
   }
+
+  // Written unconditionally so a database seeded before device auth existed
+  // still has a device that can authenticate after this upgrade.
+  await deviceRepo.update(SEED_DEVICE_ID, {
+    secretHash: sha256Hex(SEED_DEVICE_SECRET),
+    pairingCodeHash: hashPairingCode(SEED_PAIRING_CODE),
+    revokedAt: null,
+  });
 
   let assistedUser = await assistedRepo.findOne({
     where: { device: { id: SEED_DEVICE_ID } },
@@ -166,6 +181,11 @@ export async function runSeed(dataSource: DataSource) {
     console.log(`  ${g.username} / ${g.password}`);
   }
   console.log(`device id: ${SEED_DEVICE_ID}`);
+  console.log(`device pairing code: ${SEED_PAIRING_CODE}`);
+  console.log('device auth header:');
+  console.log(
+    `  Authorization: Bearer ${SEED_DEVICE_ID}.${SEED_DEVICE_SECRET}`,
+  );
 }
 
 async function seed() {

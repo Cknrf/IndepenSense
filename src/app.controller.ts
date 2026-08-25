@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { SessionAuthGuard } from './guards/session-auth.guard';
+import { DeviceAuthGuard } from './guards/device-auth.guard';
 import {
   AppService,
   WebService,
@@ -235,6 +236,11 @@ export class WebController {
   }
 }
 
+// Every route here is authenticated by the device's own credential rather than
+// by a guardian session. req.device is set by the guard and is the only
+// trustworthy source of the device id — a body or path parameter is a claim
+// the caller made about itself, which is exactly what we stopped accepting.
+@UseGuards(DeviceAuthGuard)
 @Controller('raspberry')
 export class RaspberryController {
   constructor(
@@ -245,8 +251,10 @@ export class RaspberryController {
   @Post('interval-information')
   async sendIntervalInformation(
     @Body() createIntervalInformationDTO: CreateIntervalInformationDTO,
+    @Req() req: Request,
   ) {
     const ok = await this.raspberryService.sendIntervalInformation(
+      req.device!.id,
       createIntervalInformationDTO,
     );
     if (!ok) {
@@ -255,12 +263,14 @@ export class RaspberryController {
     return 'successful';
   }
 
-  // Unauthenticated and identified by deviceID, like the other /raspberry/*
-  // routes: the device has no session. No ParseUUIDPipe, so a malformed ID
-  // gets the same 'unknown or unlinked device' as an unknown one.
-  @Get('guardians/:deviceID')
-  async getGuardians(@Param('deviceID') deviceID: string) {
-    const guardians = await this.raspberryService.getGuardianContacts(deviceID);
+  // The device id used to be a path parameter. It is a credential's other half,
+  // and URLs end up in access logs, proxy logs and browser history by default,
+  // so it moved into the Authorization header along with the secret.
+  @Get('guardians')
+  async getGuardians(@Req() req: Request) {
+    const guardians = await this.raspberryService.getGuardianContacts(
+      req.device!.id,
+    );
     if (!guardians) {
       throw new BadRequestException('unknown or unlinked device');
     }
@@ -268,8 +278,8 @@ export class RaspberryController {
   }
 
   @Post('alert')
-  async sendAlert(@Body() dto: CreateAlertDTO) {
-    const ok = await this.raspberryService.sendAlert(dto);
+  async sendAlert(@Body() dto: CreateAlertDTO, @Req() req: Request) {
+    const ok = await this.raspberryService.sendAlert(req.device!.id, dto);
     if (!ok) {
       throw new BadRequestException('unknown or unlinked device');
     }
