@@ -35,6 +35,7 @@ import { CreateAssistedUserDTO } from './DTO/assisted-user-dto';
 import { SignInDTO } from './DTO/signin.dto';
 import { CreateAlertDTO } from './DTO/create-alert.dto';
 import { PushTokenDTO } from './DTO/push-token.dto';
+import { CreateInviteDTO, RedeemInviteDTO } from './DTO/invite.dto';
 
 @Controller('main')
 export class AppController {
@@ -137,35 +138,66 @@ export class WebController {
     return { message: 'account creation successed', status: true };
   }
 
-  @UseGuards(SessionAuthGuard)
-  @Post('link-assisted-user-account')
-  async linkAssistedUser(
-    @Body() body: { deviceID: string },
-    @Req() req: Request,
-  ) {
-    const assistedUser = await this.webService.linkAssistedUser(
-      body.deviceID,
-      req.session.guardianID!,
-    );
-    if (!assistedUser) {
-      throw new BadRequestException('unable to link');
-    }
-    return assistedUser;
-  }
-
+  // Claims a device with the pairing code from its box. This is the only way
+  // to become the FIRST guardian, and it works once per device. The old
+  // link-assisted-user-account route is gone: it accepted a bare device id,
+  // which anyone who saw the manual — or the group chat it was forwarded to —
+  // could replay to attach themselves silently. Extra guardians now arrive
+  // through /web/invites.
   @UseGuards(SessionAuthGuard)
   @Post('create-assisted-user-account')
   async createAssistedUser(
     @Body() createAssistedUserDTO: CreateAssistedUserDTO,
     @Req() req: Request,
   ) {
-    const assistedUser = await this.webService.createAssistedUser(
+    return this.webService.createAssistedUser(
       createAssistedUserDTO,
       req.session.guardianID!,
     );
-    if (!assistedUser) {
-      throw new BadRequestException('account creation failed');
+  }
+
+  // Returns the only copy of the token. It is stored hashed, so it cannot be
+  // shown again — losing it means minting another.
+  @UseGuards(SessionAuthGuard)
+  @Post('invites')
+  async createInvite(
+    @Body() createInviteDTO: CreateInviteDTO,
+    @Req() req: Request,
+  ) {
+    const assistedUserID = Number(createInviteDTO?.assistedUserID);
+    if (!Number.isInteger(assistedUserID)) {
+      throw new BadRequestException('assistedUserID must be an integer');
     }
+    return this.webService.createInvite(
+      assistedUserID,
+      req.session.guardianID!,
+    );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post('invites/redeem')
+  async redeemInvite(
+    @Body() redeemInviteDTO: RedeemInviteDTO,
+    @Req() req: Request,
+  ) {
+    const { assistedUser, guardianName, notify } =
+      await this.webService.redeemInvite(
+        redeemInviteDTO?.token,
+        req.session.guardianID!,
+      );
+
+    // The link is already committed; telling people about it is best effort and
+    // must not turn a successful redemption into an error.
+    await Promise.all(
+      notify.map((guardianID) =>
+        this.pushService.sendGuardianAddedPush(guardianID, {
+          assistedUserId: assistedUser.id,
+          assistedUserName: assistedUser.name,
+          guardianName,
+        }),
+      ),
+    );
+
     return assistedUser;
   }
 

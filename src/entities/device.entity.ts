@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity()
 export class Device {
@@ -29,12 +29,25 @@ export class Device {
    * sha256 of the pairing code printed in the unit's manual, hex, normalised
    * (upper-case, hyphens stripped) before hashing.
    *
-   * Read when a guardian links themselves to the assisted user, never by the
-   * device. Kept separate from secretHash because this value is meant to be
-   * read by humans and will inevitably be forwarded between them.
+   * Read once, when the first guardian claims this device, and never by the
+   * device itself. Kept separate from secretHash because this value is meant to
+   * be read by humans and will inevitably be forwarded between them — which is
+   * survivable only because claiming spends it. See pairedAt.
    */
+  @Index('IDX_device_pairing_code', { unique: true })
   @Column({ type: 'char', length: 64, nullable: true, select: false })
   pairingCodeHash: string | null;
+
+  /**
+   * When the pairing code was spent. Non-null means this device already has an
+   * owner, so the printed code is inert no matter who reads the manual later —
+   * further guardians arrive by invite instead.
+   *
+   * Set by a conditional UPDATE rather than a read-then-write, so two people
+   * racing with the same code cannot both win.
+   */
+  @Column({ type: 'datetime', nullable: true })
+  pairedAt: Date | null;
 
   /**
    * Kill switch for a lost or stolen unit. Any non-null value denies every

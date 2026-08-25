@@ -62,11 +62,14 @@ export async function runSeed(dataSource: DataSource) {
   }
 
   // Written unconditionally so a database seeded before device auth existed
-  // still has a device that can authenticate after this upgrade.
+  // still has a device that can authenticate after this upgrade. pairedAt is
+  // set because the seed creates the assisted user below: leaving it null would
+  // advertise this device as unclaimed.
   await deviceRepo.update(SEED_DEVICE_ID, {
     secretHash: sha256Hex(SEED_DEVICE_SECRET),
     pairingCodeHash: hashPairingCode(SEED_PAIRING_CODE),
     revokedAt: null,
+    pairedAt: new Date(),
   });
 
   let assistedUser = await assistedRepo.findOne({

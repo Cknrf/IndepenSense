@@ -22,6 +22,7 @@ import { AssistedUser } from './entities/assisted_user.entity';
 import { Device } from './entities/device.entity';
 import { AlertLog } from './entities/alert_log.entity';
 import { DeviceToken } from './entities/device_token.entity';
+import { GuardianInvite } from './entities/guardian_invite.entity';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { DeviceToken } from './entities/device_token.entity';
         Device,
         AlertLog,
         DeviceToken,
+        GuardianInvite,
       ],
       synchronize: process.env.NODE_ENV !== 'production',
       retryAttempts: 10,

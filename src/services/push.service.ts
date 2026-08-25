@@ -31,6 +31,23 @@ export interface AlertPushPayload {
   location: string;
 }
 
+/** Sent to the guardians who were already watching, when one more joins. */
+export interface GuardianAddedPayload {
+  assistedUserId: number;
+  assistedUserName: string;
+  guardianName: string;
+}
+
+/**
+ * A notification in transport-neutral form. `data` keeps real JSON types; only
+ * the FCM leg flattens it, because FCM rejects any non-string data value.
+ */
+interface PushMessage {
+  title: string;
+  body: string;
+  data: Record<string, string | number>;
+}
+
 @Injectable()
 export class PushService implements OnModuleInit {
   private readonly logger = new Logger(PushService.name);
@@ -185,6 +202,44 @@ export class PushService implements OnModuleInit {
    * Never throws: a push failure must not fail the alert that triggered it.
    */
   async sendAlertPush(guardianID: number, alert: AlertPushPayload) {
+    await this.send(guardianID, {
+      title: alert.eventType,
+      body: alert.location,
+      data: {
+        type: 'alert',
+        alertId: alert.alertId,
+        assistedUserId: alert.assistedUserId,
+        eventType: alert.eventType,
+        location: alert.location,
+      },
+    });
+  }
+
+  /**
+   * Tell the existing guardians that someone else now watches this person.
+   *
+   * This is the part that makes a leaked invite survivable: it cannot be
+   * redeemed quietly. Prevention is the single-use, 30-minute token; this is
+   * the detection behind it.
+   */
+  async sendGuardianAddedPush(
+    guardianID: number,
+    notice: GuardianAddedPayload,
+  ) {
+    await this.send(guardianID, {
+      title: 'New guardian added',
+      body: `${notice.guardianName} can now see ${notice.assistedUserName}.`,
+      data: {
+        type: 'guardian-added',
+        assistedUserId: notice.assistedUserId,
+        assistedUserName: notice.assistedUserName,
+        guardianName: notice.guardianName,
+      },
+    });
+  }
+
+  /** Fan one message out to every device the guardian has registered. */
+  private async send(guardianID: number, message: PushMessage) {
     let tokens: DeviceToken[];
     try {
       tokens = await this.dataSource
@@ -198,8 +253,8 @@ export class PushService implements OnModuleInit {
     await Promise.all(
       tokens.map(async (row) => {
         try {
-          if (row.platform === 'fcm') await this.sendFcm(row, alert);
-          else await this.sendWebPush(row, alert);
+          if (row.platform === 'fcm') await this.sendFcm(row, message);
+          else await this.sendWebPush(row, message);
         } catch (e) {
           this.logger.error(`Push to token ${row.id} failed`, e);
         }
@@ -209,7 +264,7 @@ export class PushService implements OnModuleInit {
 
   // -------------------------------------------------------------- FCM leg
 
-  private async sendFcm(row: DeviceToken, alert: AlertPushPayload) {
+  private async sendFcm(row: DeviceToken, message: PushMessage) {
     if (!this.fcmClient || !this.fcmProjectId) return;
 
     const { token: accessToken } = await this.fcmClient.getAccessToken();
@@ -229,18 +284,15 @@ export class PushService implements OnModuleInit {
         body: JSON.stringify({
           message: {
             token: row.token,
-            notification: { title: alert.eventType, body: alert.location },
+            notification: { title: message.title, body: message.body },
             android: {
               priority: 'high',
               notification: { channel_id: ANDROID_CHANNEL_ID },
             },
             // FCM rejects the whole message if any data value is not a string.
-            data: {
-              alertId: String(alert.alertId),
-              assistedUserId: String(alert.assistedUserId),
-              eventType: alert.eventType,
-              location: alert.location,
-            },
+            data: Object.fromEntries(
+              Object.entries(message.data).map(([k, v]) => [k, String(v)]),
+            ),
           },
         }),
       },
@@ -260,7 +312,7 @@ export class PushService implements OnModuleInit {
 
   // --------------------------------------------------------- Web Push leg
 
-  private async sendWebPush(row: DeviceToken, alert: AlertPushPayload) {
+  private async sendWebPush(row: DeviceToken, message: PushMessage) {
     if (!this.vapidPublicKey) return;
 
     let subscription: webpush.PushSubscription;
@@ -276,14 +328,9 @@ export class PushService implements OnModuleInit {
         subscription,
         // Unlike FCM, Web Push keeps the real JSON types.
         JSON.stringify({
-          title: alert.eventType,
-          body: alert.location,
-          data: {
-            alertId: alert.alertId,
-            assistedUserId: alert.assistedUserId,
-            eventType: alert.eventType,
-            location: alert.location,
-          },
+          title: message.title,
+          body: message.body,
+          data: message.data,
         }),
       );
     } catch (e) {

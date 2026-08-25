@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -12,15 +13,27 @@ import { SignInDTO } from './DTO/signin.dto';
 import { CreateAlertDTO } from './DTO/create-alert.dto';
 import { AlertsStreamService } from './services/alerts-stream.service';
 import { PushService } from './services/push.service';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
 import { Guardian } from './entities/guardian.entity';
 import { AssistedUser } from './entities/assisted_user.entity';
 import { AlertLog } from './entities/alert_log.entity';
+import { GuardianInvite } from './entities/guardian_invite.entity';
 import { HttpService } from '@nestjs/axios';
 import { normalizeE164 } from './utils/phone';
+import {
+  generatePairingCode,
+  hashPairingCode,
+  normalizePairingCode,
+} from './utils/device-credentials';
 import * as bcrypt from 'bcrypt';
+
+/**
+ * How long an invite stays usable. Short on purpose: it travels by text message
+ * and lives in that thread forever, so its window should not.
+ */
+const INVITE_TTL_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class AppService {
@@ -136,43 +149,42 @@ export class WebService {
     }
   }
 
-  async linkAssistedUser(deviceID: string, guardianID: number) {
-    const assistedUserRepository = this.dataSource.getRepository(AssistedUser);
-    const guardianRepository = this.dataSource.getRepository(Guardian);
-
-    const assistedUser = await assistedUserRepository.findOne({
-      where: { device: { id: deviceID } },
-    });
-    if (!assistedUser) return null;
-
-    const guardian = await guardianRepository.findOne({
-      where: { id: guardianID },
-      relations: { assistedUsers: true },
-    });
-    if (!guardian) return null;
-
-    if (guardian.assistedUsers.some((u) => u.id === assistedUser.id)) {
-      throw new ConflictException('assisted user already linked');
-    }
-
-    guardian.assistedUsers = [...guardian.assistedUsers, assistedUser];
-
-    try {
-      await guardianRepository.save(guardian);
-      return { id: assistedUser.id, name: assistedUser.name };
-    } catch (e) {
-      console.error(e);
-      return null;
-    }
-  }
-
+  /**
+   * Claim a device with the pairing code printed in its box, creating the
+   * assisted user and making the caller their first guardian.
+   *
+   * The code proves physical possession of the unit, which is the only thing
+   * anyone can prove before an account exists. It works exactly once — after
+   * that the printed code is inert and further guardians arrive by invite, so
+   * a manual photographed months later grants nothing.
+   */
   async createAssistedUser(
     createAssistedUser: CreateAssistedUserDTO,
     guardianID: number,
   ) {
-    const device = await this.getDevice(createAssistedUser.deviceID);
-    if (!device) {
-      return null;
+    const name = createAssistedUser?.name?.trim();
+    if (!name) {
+      throw new BadRequestException('name is required');
+    }
+
+    const pairingCode =
+      typeof createAssistedUser?.pairingCode === 'string'
+        ? createAssistedUser.pairingCode
+        : '';
+    if (!normalizePairingCode(pairingCode)) {
+      throw new BadRequestException('pairingCode is required');
+    }
+
+    const device = await this.dataSource.getRepository(Device).findOne({
+      where: { pairingCodeHash: hashPairingCode(pairingCode) },
+      select: { id: true, pairedAt: true, revokedAt: true },
+    });
+
+    // One answer for a wrong code, an already-claimed device and a revoked one.
+    // The caller is holding a piece of paper; which of those is true is not
+    // something they should be able to establish by probing.
+    if (!device || device.revokedAt || device.pairedAt) {
+      throw new BadRequestException('invalid or already used pairing code');
     }
 
     const guardianRepository = this.dataSource.getRepository(Guardian);
@@ -181,28 +193,140 @@ export class WebService {
       relations: { assistedUsers: true },
     });
     if (!guardian) {
-      return null;
+      throw new UnauthorizedException('not signed in');
     }
 
-    try {
-      return await this.dataSource.transaction(async (manager) => {
-        const assistedUser = await manager.save(
-          manager.create(AssistedUser, {
-            name: createAssistedUser.name,
-            device,
-          }),
-        );
-        guardian.assistedUsers = [
-          ...(guardian.assistedUsers ?? []),
-          assistedUser,
-        ];
-        await manager.save(guardian);
-        return { id: assistedUser.id, name: assistedUser.name };
-      });
-    } catch (e) {
-      console.error(e);
-      return null;
+    return this.dataSource.transaction(async (manager) => {
+      // Compare-and-set rather than read-then-write: two people racing with the
+      // same code both pass the check above, and only one may pass this.
+      const claimed = await manager.update(
+        Device,
+        { id: device.id, pairedAt: IsNull() },
+        { pairedAt: new Date() },
+      );
+      if (claimed.affected !== 1) {
+        throw new BadRequestException('invalid or already used pairing code');
+      }
+
+      const assistedUser = await manager.save(
+        manager.create(AssistedUser, {
+          name,
+          device: { id: device.id } as Device,
+        }),
+      );
+      guardian.assistedUsers = [
+        ...(guardian.assistedUsers ?? []),
+        assistedUser,
+      ];
+      await manager.save(guardian);
+
+      return { id: assistedUser.id, name: assistedUser.name };
+    });
+  }
+
+  /**
+   * Mint a single-use invite so an existing guardian can add another one.
+   *
+   * Returns the only copy of the plaintext token — it is stored hashed, so a
+   * guardian who loses it mints a new one rather than recovering this.
+   */
+  async createInvite(assistedUserID: number, guardianID: number) {
+    // The caller must already watch this person. Without this check, anyone
+    // with an account could mint an invite for any assisted user id they tried.
+    const isGuardian = await this.dataSource.getRepository(Guardian).existsBy({
+      id: guardianID,
+      assistedUsers: { id: assistedUserID },
+    });
+    if (!isGuardian) {
+      throw new ForbiddenException();
     }
+
+    const token = generatePairingCode();
+    const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+
+    await this.dataSource.getRepository(GuardianInvite).insert({
+      tokenHash: hashPairingCode(token),
+      assistedUserId: assistedUserID,
+      createdByGuardianId: guardianID,
+      expiresAt,
+      redeemedAt: null,
+      redeemedByGuardianId: null,
+    });
+
+    return { token, expiresAt };
+  }
+
+  /**
+   * Spend an invite, linking the signed-in guardian to the assisted user.
+   *
+   * Returns the new link plus the guardians who were already watching, so the
+   * caller can tell them — a redemption they cannot see is a redemption they
+   * cannot dispute.
+   */
+  async redeemInvite(token: string, guardianID: number) {
+    const raw = typeof token === 'string' ? token : '';
+    if (!normalizePairingCode(raw)) {
+      throw new BadRequestException('token is required');
+    }
+
+    const invite = await this.dataSource.getRepository(GuardianInvite).findOne({
+      where: { tokenHash: hashPairingCode(raw) },
+    });
+
+    // Unknown, expired and already spent are one answer: the token either
+    // works right now or it does not.
+    if (
+      !invite ||
+      invite.redeemedAt ||
+      invite.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new BadRequestException('invalid or expired invite');
+    }
+
+    const guardianRepository = this.dataSource.getRepository(Guardian);
+    const guardian = await guardianRepository.findOne({
+      where: { id: guardianID },
+      relations: { assistedUsers: true },
+    });
+    if (!guardian) {
+      throw new UnauthorizedException('not signed in');
+    }
+
+    if (guardian.assistedUsers.some((u) => u.id === invite.assistedUserId)) {
+      throw new ConflictException('assisted user already linked');
+    }
+
+    const assistedUser = await this.dataSource
+      .getRepository(AssistedUser)
+      .findOne({ where: { id: invite.assistedUserId } });
+    if (!assistedUser) {
+      throw new BadRequestException('invalid or expired invite');
+    }
+
+    // Captured before the link, so the new guardian is not told about himself.
+    const existingGuardians = await this.getContacts(assistedUser.id);
+
+    await this.dataSource.transaction(async (manager) => {
+      // Same compare-and-set as claiming: single-use has to be enforced by the
+      // database, not by the check above, or two redemptions can interleave.
+      const spent = await manager.update(
+        GuardianInvite,
+        { id: invite.id, redeemedAt: IsNull() },
+        { redeemedAt: new Date(), redeemedByGuardianId: guardianID },
+      );
+      if (spent.affected !== 1) {
+        throw new BadRequestException('invalid or expired invite');
+      }
+
+      guardian.assistedUsers = [...guardian.assistedUsers, assistedUser];
+      await manager.save(guardian);
+    });
+
+    return {
+      assistedUser: { id: assistedUser.id, name: assistedUser.name },
+      guardianName: guardian.name,
+      notify: existingGuardians.map((g) => g.id),
+    };
   }
 
   async doesUsernameExist(username: string) {
