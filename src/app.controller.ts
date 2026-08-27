@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   MessageEvent,
+  NotFoundException,
   Post,
   Req,
   Res,
@@ -36,6 +37,7 @@ import { SignInDTO } from './DTO/signin.dto';
 import { CreateAlertDTO } from './DTO/create-alert.dto';
 import { PushTokenDTO } from './DTO/push-token.dto';
 import { CreateInviteDTO, RedeemInviteDTO } from './DTO/invite.dto';
+import { manilaDate } from './utils/manila-time';
 
 @Controller('main')
 export class AppController {
@@ -105,6 +107,64 @@ export class WebController {
         ),
       })),
     );
+  }
+
+  // The History tab: the same alert objects as the route above, restricted to a
+  // window the server chooses. There are deliberately no query parameters — a
+  // client-supplied range would let the browser ask for more than 7 days, and
+  // `from`/`to` below are rendered as fact by the UI, so they are computed here
+  // rather than echoed back from the request.
+  @UseGuards(SessionAuthGuard)
+  @Get('alerts/:assistedUserID/history')
+  async getAlertHistory(
+    @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+    @Req() req: Request,
+  ) {
+    // Existence is checked before the guardian link, because an unknown
+    // assisted user has no guardians and would otherwise answer 403 — and the
+    // web client reads 404 on this route as "history not available".
+    if (!(await this.webService.assistedUserExists(assistedUserID))) {
+      throw new NotFoundException('assisted user not found');
+    }
+
+    const contacts = await this.webService.getContacts(assistedUserID);
+    if (!contacts.some((c) => c.id === req.session.guardianID)) {
+      throw new ForbiddenException();
+    }
+
+    const { alerts, ...window } =
+      await this.webService.getAlertHistory(assistedUserID);
+
+    // A week of alerts can repeat the same coordinates many times over (the
+    // wearable sits at home), and each distinct pair costs one Nominatim call,
+    // so identical points are resolved once per request.
+    const locations = new Map<
+      string,
+      ReturnType<LocationService['reverseGeoCode']>
+    >();
+    const locationFor = (latitude: number, longitude: number) => {
+      const key = `${latitude},${longitude}`;
+      let pending = locations.get(key);
+      if (!pending) {
+        pending = this.locationService.reverseGeoCode(latitude, longitude);
+        locations.set(key, pending);
+      }
+      return pending;
+    };
+
+    return {
+      ...window,
+      alerts: await Promise.all(
+        alerts.map(async (a) => ({
+          ...a,
+          location: await locationFor(a.latitude, a.longitude),
+          // Sent so the client groups by the server's idea of the day. If it
+          // derived the day from `occuredAt` itself it could disagree with the
+          // window at a midnight boundary.
+          occuredAtLocalDate: manilaDate(a.occuredAt),
+        })),
+      ),
+    };
   }
 
   @UseGuards(SessionAuthGuard)

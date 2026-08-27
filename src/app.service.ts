@@ -13,7 +13,7 @@ import { SignInDTO } from './DTO/signin.dto';
 import { CreateAlertDTO } from './DTO/create-alert.dto';
 import { AlertsStreamService } from './services/alerts-stream.service';
 import { PushService } from './services/push.service';
-import { DataSource, IsNull } from 'typeorm';
+import { Between, DataSource, IsNull } from 'typeorm';
 import { IntervalInformation } from './entities/interval_information.entity';
 import { Device } from './entities/device.entity';
 import { Guardian } from './entities/guardian.entity';
@@ -27,6 +27,12 @@ import {
   hashPairingCode,
   normalizePairingCode,
 } from './utils/device-credentials';
+import {
+  manilaDate,
+  manilaDateMinusDays,
+  manilaDayEnd,
+  manilaDayStart,
+} from './utils/manila-time';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -34,6 +40,12 @@ import * as bcrypt from 'bcrypt';
  * and lives in that thread forever, so its window should not.
  */
 const INVITE_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * How far back the history tab can see, in Manila days including today. This is
+ * a serving limit only: older alerts are kept, just not returned here.
+ */
+const ALERT_HISTORY_DAYS = 7;
 
 @Injectable()
 export class AppService {
@@ -73,6 +85,36 @@ export class WebService {
       order: { occuredAt: 'DESC' },
       take: 5,
     });
+  }
+
+  /**
+   * The alerts of the last 7 Manila days, newest first, together with the
+   * window actually served so the UI can state it without recomputing it.
+   *
+   * The window is bounded in the query, not in the client: filtering a longer
+   * list in the browser would still have shipped the older alerts to it, which
+   * makes the limit cosmetic. Nothing is deleted — alerts outside the window
+   * stay in the database, they are records of real emergencies.
+   */
+  async getAlertHistory(assistedUserID: number) {
+    const to = manilaDate(new Date());
+    const from = manilaDateMinusDays(to, ALERT_HISTORY_DAYS - 1);
+
+    const alerts = await this.dataSource.getRepository(AlertLog).find({
+      where: {
+        assistedUser: { id: assistedUserID },
+        occuredAt: Between(manilaDayStart(from), manilaDayEnd(to)),
+      },
+      order: { occuredAt: 'DESC' },
+    });
+
+    return { from, to, retentionDays: ALERT_HISTORY_DAYS, alerts };
+  }
+
+  async assistedUserExists(assistedUserID: number) {
+    return this.dataSource
+      .getRepository(AssistedUser)
+      .existsBy({ id: assistedUserID });
   }
 
   async getIntervalInformation(assistedUserID: number) {
