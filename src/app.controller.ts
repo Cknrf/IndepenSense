@@ -95,7 +95,17 @@ export class WebController {
   @Get('alerts/:assistedUserID')
   async getAlerts(
     @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+    @Req() req: Request,
   ) {
+    // Being signed in is not enough: the id comes from the path, so without
+    // this check any guardian could count upwards through it and read every
+    // assisted user's alerts — coordinates and addresses included. The sibling
+    // routes above have always checked; this one did not.
+    const contacts = await this.webService.getContacts(assistedUserID);
+    if (!contacts.some((c) => c.id === req.session.guardianID)) {
+      throw new ForbiddenException();
+    }
+
     const alerts = await this.webService.getAlerts(assistedUserID);
 
     return Promise.all(
