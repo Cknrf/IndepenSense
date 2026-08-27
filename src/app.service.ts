@@ -33,6 +33,7 @@ import {
   manilaDayEnd,
   manilaDayStart,
 } from './utils/manila-time';
+import { clusterVisits } from './utils/geo';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -46,6 +47,9 @@ const INVITE_TTL_MS = 30 * 60 * 1000;
  * a serving limit only: older alerts are kept, just not returned here.
  */
 const ALERT_HISTORY_DAYS = 7;
+
+/** As above, for the location history tab. Also serving-only: nothing is deleted. */
+const LOCATION_HISTORY_DAYS = 7;
 
 @Injectable()
 export class AppService {
@@ -126,6 +130,43 @@ export class WebService {
       take: 1,
     });
     return intervalInformation;
+  }
+
+  /**
+   * Where the assisted user has been over the last 7 Manila days, as visits
+   * rather than raw readings, oldest first.
+   *
+   * Same serving rule as the alert history: bounded here, in the query, and
+   * nothing is deleted. `createdAt` is the stored column — see the entity; it is
+   * set when the report reaches the server, and is surfaced as `recordedAt`.
+   */
+  async getLocationHistory(assistedUserID: number) {
+    const to = manilaDate(new Date());
+    const from = manilaDateMinusDays(to, LOCATION_HISTORY_DAYS - 1);
+
+    const samples = await this.dataSource
+      .getRepository(IntervalInformation)
+      .find({
+        where: {
+          assistedUser: { id: assistedUserID },
+          createdAt: Between(manilaDayStart(from), manilaDayEnd(to)),
+        },
+        // Oldest first: this is a path through the week, and clustering reads it
+        // in order.
+        order: { createdAt: 'ASC' },
+        select: { latitude: true, longitude: true, createdAt: true },
+      });
+
+    // ~20,000 rows in, a few dozen out. The rows themselves stay in the table.
+    const visits = clusterVisits(
+      samples.map((s) => ({
+        latitude: s.latitude,
+        longitude: s.longitude,
+        recordedAt: s.createdAt,
+      })),
+    );
+
+    return { from, to, retentionDays: LOCATION_HISTORY_DAYS, visits };
   }
 
   async confirmDevice(id: string) {
@@ -577,4 +618,3 @@ export class RaspberryService {
     }
   }
 }
-

@@ -38,6 +38,16 @@ import { CreateAlertDTO } from './DTO/create-alert.dto';
 import { PushTokenDTO } from './DTO/push-token.dto';
 import { CreateInviteDTO, RedeemInviteDTO } from './DTO/invite.dto';
 import { manilaDate } from './utils/manila-time';
+import { distanceMeters, type Visit } from './utils/geo';
+
+/**
+ * How far a visit has to be from an already-resolved one before it is worth
+ * asking the geocoder again. Below this the answer is the same street anyway.
+ */
+const GEOCODE_REUSE_RADIUS_M = 50;
+
+/** What LocationService hands back — it predates this file's typing. */
+type PlaceName = Awaited<ReturnType<LocationService['reverseGeoCode']>>;
 
 @Controller('main')
 export class AppController {
@@ -190,6 +200,59 @@ export class WebController {
       data[0].longitude,
     );
     return { ...data[0], location };
+  }
+
+  // The location History tab. Server-side window, server-side clustering: a raw
+  // week is ~20,000 readings, the visits behind them are a few dozen.
+  @UseGuards(SessionAuthGuard)
+  @Get('interval-information/:assistedUserID/history')
+  async getLocationHistory(
+    @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+    @Req() req: Request,
+  ) {
+    const contacts = await this.webService.getContacts(assistedUserID);
+    if (!contacts.some((c) => c.id === req.session.guardianID)) {
+      throw new ForbiddenException();
+    }
+
+    const { visits, ...window } =
+      await this.webService.getLocationHistory(assistedUserID);
+
+    // One Nominatim call per *place*, not per visit: a week of going to the same
+    // market and back revisits the same coordinates, and the geocoder is shared
+    // with the alert path — getting blocked here would take that down too.
+    const resolved: {
+      latitude: number;
+      longitude: number;
+      name: PlaceName;
+    }[] = [];
+    const nameFor = async (latitude: number, longitude: number) => {
+      const nearby = resolved.find(
+        (r) =>
+          distanceMeters(r.latitude, r.longitude, latitude, longitude) <=
+          GEOCODE_REUSE_RADIUS_M,
+      );
+      if (nearby) return nearby.name;
+
+      const name = await this.locationService.reverseGeoCode(
+        latitude,
+        longitude,
+      );
+      resolved.push({ latitude, longitude, name });
+      return name;
+    };
+
+    // Sequential, not Promise.all: this shares a rate-limited third party with
+    // the alert routes, so the visits are resolved one at a time.
+    const samples: Array<Visit & { location: PlaceName }> = [];
+    for (const visit of visits) {
+      samples.push({
+        ...visit,
+        location: await nameFor(visit.latitude, visit.longitude),
+      });
+    }
+
+    return { ...window, samples };
   }
 
   @Post('device-confirmation')
