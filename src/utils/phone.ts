@@ -2,8 +2,6 @@
 // stored number verbatim and fails silently on anything that is not E.164.
 // Numbers are therefore normalised and checked here, on the way into the
 // database, rather than relying only on the device's defensive pass.
-const E164 = /^\+[1-9]\d{7,14}$/;
-
 // Philippine mobile numbers are the only ones that can receive the device's
 // SMS, so they are held to their exact shape rather than to generic E.164:
 // country code 63, then a 10-digit subscriber number always starting with 9.
@@ -20,11 +18,13 @@ const PH_MOBILE = /^\+639\d{9}$/;
  *   639171234567  -> +639171234567   (country code, missing the plus)
  *   00639171234567-> +639171234567   (international call prefix)
  *
- * Anything already carrying a non-63 country code is accepted as generic
- * E.164, so foreign numbers are not mangled by the +63 assumption.
+ * Everything else is rejected, including well-formed foreign numbers. The
+ * wearable's modem is the only delivery path for an emergency SMS, and it
+ * reaches PH mobiles — so a +1 number is not a guardian who gets alerted late,
+ * it is a guardian who is never alerted at all.
  *
- * A PH landline (+632…) is rejected on purpose: it cannot receive SMS, and
- * storing one would look fine on the web form while silently failing on the
+ * A PH landline (+632…) is rejected for the same reason: it cannot receive SMS,
+ * and storing one would look fine on the web form while silently failing on the
  * device at the moment it matters.
  */
 export function normalizeE164(raw: unknown): string | null {
@@ -44,9 +44,5 @@ export function normalizeE164(raw: unknown): string | null {
     cleaned = '+63' + cleaned;
   }
 
-  if (cleaned.startsWith('+63')) {
-    return PH_MOBILE.test(cleaned) ? cleaned : null;
-  }
-
-  return E164.test(cleaned) ? cleaned : null;
+  return PH_MOBILE.test(cleaned) ? cleaned : null;
 }
