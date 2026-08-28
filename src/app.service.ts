@@ -34,6 +34,7 @@ import {
   manilaDayStart,
 } from './utils/manila-time';
 import { clusterVisits } from './utils/geo';
+import { resolveDeviceTime } from './utils/device-time';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -457,9 +458,46 @@ export class WebService {
   }
 }
 
+const UNKNOWN_LOCATION = 'unable to retrieve location';
+
+/**
+ * Coordinates are cached to ~4 decimals, about 11 m. Finer than that is below
+ * the noise of a consumer GPS, so two readings that differ only in the fifth
+ * decimal are the same doorstep and deserve the same answer.
+ */
+const GEOCODE_KEY_DECIMALS = 4;
+
+/**
+ * Place names do not change on any timescale that matters here; the expiry is
+ * about not holding coordinates forever, not about freshness.
+ */
+const GEOCODE_TTL_MS = 60 * 60 * 1000;
+
+/** Cap on distinct places remembered, so the cache cannot grow without bound. */
+const GEOCODE_CACHE_MAX = 1000;
+
 @Injectable()
 export class LocationService {
-  async reverseGeoCode(latitude: number, longitude: number): Promise<String> {
+  // Nominatim's usage policy is 1 request/second for the whole origin, and this
+  // one origin serves every guardian's dashboard poll as well as every alert.
+  // Without this cache a stationary wearable is re-geocoded on every poll, at
+  // the same coordinate, forever — and a block here would take alert geocoding
+  // down with it.
+  private readonly cache = new Map<
+    string,
+    { name: string; storedAt: number }
+  >();
+
+  async reverseGeoCode(latitude: number, longitude: number): Promise<string> {
+    const key = `${latitude.toFixed(GEOCODE_KEY_DECIMALS)},${longitude.toFixed(
+      GEOCODE_KEY_DECIMALS,
+    )}`;
+
+    const hit = this.cache.get(key);
+    if (hit && Date.now() - hit.storedAt < GEOCODE_TTL_MS) {
+      return hit.name;
+    }
+
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=jsonv2`,
       {
@@ -471,11 +509,24 @@ export class LocationService {
 
     if (!response.ok) {
       console.log(response.status);
-      return 'unable to retrieve location';
+      // Deliberately not cached: a 429 or a blip should not pin "unavailable"
+      // to this place for the next hour.
+      return UNKNOWN_LOCATION;
     }
 
-    const data = await response.json();
-    return data.name;
+    const data = (await response.json()) as { name?: string };
+    // Nominatim omits `name` for coordinates with no named feature, which used
+    // to leak an undefined through to the client as a missing field.
+    const name = data.name ?? UNKNOWN_LOCATION;
+    if (name !== UNKNOWN_LOCATION) {
+      if (this.cache.size >= GEOCODE_CACHE_MAX) {
+        // Oldest insertion first — enough to bound the map without tracking use.
+        const oldest = this.cache.keys().next();
+        if (!oldest.done) this.cache.delete(oldest.value);
+      }
+      this.cache.set(key, { name, storedAt: Date.now() });
+    }
+    return name;
   }
 }
 
@@ -542,8 +593,25 @@ export class RaspberryService {
       return false;
     }
 
+    // Field by field, not Object.assign(alert, dto): `dto` is the raw request
+    // body — there is no global ValidationPipe, so the DTO class is a
+    // compile-time shape only and anything else the device posts would be
+    // copied straight onto the entity.
+    const receivedAt = new Date();
+    const occuredAt = resolveDeviceTime(dto?.occuredAt, receivedAt);
+    if (occuredAt.replaced) {
+      console.warn(
+        `Device ${deviceID} sent an implausible occuredAt (${occuredAt.replaced}): ${String(
+          dto?.occuredAt,
+        )} — filing at receipt time instead. Check its clock.`,
+      );
+    }
+
     const alert = new AlertLog();
-    Object.assign(alert, dto);
+    alert.eventType = dto.eventType;
+    alert.latitude = dto.latitude;
+    alert.longitude = dto.longitude;
+    alert.occuredAt = occuredAt.at;
     alert.assistedUser = assistedUser;
 
     const saved = await this.dataSource.getRepository(AlertLog).save(alert);
@@ -598,8 +666,17 @@ export class RaspberryService {
       return false;
     }
 
+    // Field by field for the same reason as sendAlert, and with one addition:
+    // createdAt is deliberately not settable from the body. TypeORM does not
+    // override an explicitly assigned @CreateDateColumn, so copying the body
+    // wholesale would let a device backdate its own location history.
     const intervalInformation = new IntervalInformation();
-    Object.assign(intervalInformation, createIntervalInformationDTO);
+    intervalInformation.batteryHealth =
+      createIntervalInformationDTO.batteryHealth;
+    intervalInformation.internetStatus =
+      createIntervalInformationDTO.internetStatus;
+    intervalInformation.latitude = createIntervalInformationDTO.latitude;
+    intervalInformation.longitude = createIntervalInformationDTO.longitude;
     intervalInformation.assistedUser = assistedUser;
 
     const queryRunner = this.dataSource.createQueryRunner();

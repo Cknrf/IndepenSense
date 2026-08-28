@@ -18,10 +18,15 @@ const PLATFORMS: PushPlatform[] = ['fcm', 'webpush'];
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 
 /**
- * The client creates this channel as IMPORTANCE_HIGH (see pushNative.ts in the
- * web repo). A notification sent to any other channel id arrives silently.
+ * The channels the client creates (see pushNative.ts in the web repo). A
+ * notification sent to any id the client does not create arrives silently.
+ *
+ * ALERTS is importance 5: heads-up, vibration — right for a fall, wrong for
+ * everything else. SECURITY is importance 4, no vibration: it still arrives
+ * promptly, it just does not imitate an emergency.
  */
-const ANDROID_CHANNEL_ID = 'indepensense-alerts';
+const ANDROID_CHANNEL_ALERTS = 'indepensense-alerts';
+const ANDROID_CHANNEL_SECURITY = 'indepensense-security';
 
 /** What a guardian's device is told about an alert, on either transport. */
 export interface AlertPushPayload {
@@ -46,6 +51,8 @@ interface PushMessage {
   title: string;
   body: string;
   data: Record<string, string | number>;
+  /** Which Android channel this arrives on — see the constants above. */
+  channelId: string;
 }
 
 @Injectable()
@@ -205,6 +212,7 @@ export class PushService implements OnModuleInit {
     await this.send(guardianID, {
       title: alert.eventType,
       body: alert.location,
+      channelId: ANDROID_CHANNEL_ALERTS,
       data: {
         type: 'alert',
         alertId: alert.alertId,
@@ -229,6 +237,9 @@ export class PushService implements OnModuleInit {
     await this.send(guardianID, {
       title: 'New guardian added',
       body: `${notice.guardianName} can now see ${notice.assistedUserName}.`,
+      // Important to see, but it is not an emergency: someone joining should
+      // not buzz like a fall at 3am.
+      channelId: ANDROID_CHANNEL_SECURITY,
       data: {
         type: 'guardian-added',
         assistedUserId: notice.assistedUserId,
@@ -287,7 +298,7 @@ export class PushService implements OnModuleInit {
             notification: { title: message.title, body: message.body },
             android: {
               priority: 'high',
-              notification: { channel_id: ANDROID_CHANNEL_ID },
+              notification: { channel_id: message.channelId },
             },
             // FCM rejects the whole message if any data value is not a string.
             data: Object.fromEntries(

@@ -191,7 +191,16 @@ export class WebController {
   @Get('interval-information/:assistedUserID')
   async getIntervalInformation(
     @Param('assistedUserID', ParseIntPipe) assistedUserID: number,
+    @Req() req: Request,
   ) {
+    // Same check as every other route that takes an id from the path. This one
+    // is the worst place to omit it: it is live position rather than history,
+    // and the dashboard polls it continuously.
+    const contacts = await this.webService.getContacts(assistedUserID);
+    if (!contacts.some((c) => c.id === req.session.guardianID)) {
+      throw new ForbiddenException();
+    }
+
     const data = await this.webService.getIntervalInformation(assistedUserID);
     if (!data.length) return null;
 
