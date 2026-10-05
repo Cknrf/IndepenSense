@@ -482,6 +482,15 @@ const NOMINATIM_MIN_GAP_MS = 1100;
 /** A hung geocoder must not hold an alert response open indefinitely. */
 const NOMINATIM_TIMEOUT_MS = 5000;
 
+/**
+ * How long an alert's notification waits for a place name before going out
+ * without one. Lookups share one rate-limited queue with the dashboard and
+ * history routes, so an alert can sit behind dozens of them; a guardian
+ * learning of a fall half a minute late is far worse than seeing coordinates
+ * instead of a street name, which the web client already falls back to.
+ */
+const ALERT_GEOCODE_WAIT_MS = 3000;
+
 interface NominatimReverse {
   name?: string;
   display_name?: string;
@@ -735,10 +744,16 @@ export class RaspberryService {
   }
 
   private async notifyGuardians(assistedUserID: number, saved: AlertLog) {
-    const location = await this.locationService.reverseGeoCode(
-      saved.latitude,
-      saved.longitude,
-    );
+    let timer: NodeJS.Timeout | undefined;
+    const location = await Promise.race([
+      this.locationService.reverseGeoCode(saved.latitude, saved.longitude),
+      new Promise<string>((resolve) => {
+        timer = setTimeout(
+          () => resolve(UNKNOWN_LOCATION),
+          ALERT_GEOCODE_WAIT_MS,
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
 
     this.alertsStreamService.publish(assistedUserID, {
       id: saved.id,
@@ -748,6 +763,18 @@ export class RaspberryService {
       occuredAt: saved.occuredAt,
       location,
     });
+
+    // The push body is shown as-is by the phone, so a missing name becomes
+    // the coordinates rather than the internal "unable to retrieve" string.
+    // The SSE event keeps the raw value: the web client makes this same
+    // fallback itself.
+    const hasFix = !(saved.latitude === 0 && saved.longitude === 0);
+    const pushLocation =
+      location !== UNKNOWN_LOCATION
+        ? location
+        : hasFix
+          ? `${saved.latitude.toFixed(5)}, ${saved.longitude.toFixed(5)}`
+          : 'Location unavailable';
 
     // The SSE stream only reaches an open page. Push wakes every guardian of
     // this assisted user, whichever of their people they happen to be viewing.
@@ -762,7 +789,7 @@ export class RaspberryService {
           alertId: saved.id,
           assistedUserId: assistedUserID,
           eventType: saved.eventType,
-          location: String(location ?? ''),
+          location: pushLocation,
         }),
       ),
     );
