@@ -722,12 +722,25 @@ export class RaspberryService {
 
     const saved = await this.dataSource.getRepository(AlertLog).save(alert);
 
+    // Not awaited: the device is answered as soon as the alert is stored.
+    // It gives up after 5 s and retries, and the place-name lookup alone can
+    // take that long behind Nominatim's rate limit — so waiting for it here
+    // turned a slow geocode into a second copy of the same alert, and a second
+    // push to every guardian.
+    void this.notifyGuardians(assistedUser.id, saved).catch((e) =>
+      console.error(`Failed to notify guardians of alert ${saved.id}:`, e),
+    );
+
+    return true;
+  }
+
+  private async notifyGuardians(assistedUserID: number, saved: AlertLog) {
     const location = await this.locationService.reverseGeoCode(
       saved.latitude,
       saved.longitude,
     );
 
-    this.alertsStreamService.publish(assistedUser.id, {
+    this.alertsStreamService.publish(assistedUserID, {
       id: saved.id,
       eventType: saved.eventType,
       latitude: saved.latitude,
@@ -739,7 +752,7 @@ export class RaspberryService {
     // The SSE stream only reaches an open page. Push wakes every guardian of
     // this assisted user, whichever of their people they happen to be viewing.
     const guardians = await this.dataSource.getRepository(Guardian).find({
-      where: { assistedUsers: { id: assistedUser.id } },
+      where: { assistedUsers: { id: assistedUserID } },
       select: { id: true },
     });
 
@@ -747,14 +760,12 @@ export class RaspberryService {
       guardians.map((guardian) =>
         this.pushService.sendAlertPush(guardian.id, {
           alertId: saved.id,
-          assistedUserId: assistedUser.id,
+          assistedUserId: assistedUserID,
           eventType: saved.eventType,
           location: String(location ?? ''),
         }),
       ),
     );
-
-    return true;
   }
 
   async sendIntervalInformation(
