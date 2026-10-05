@@ -645,6 +645,24 @@ export class LocationService {
   }
 }
 
+/**
+ * A coordinate from a device body, as a finite number or 0.
+ *
+ * There is no global ValidationPipe, so the DTO's `number` is a compile-time
+ * claim about raw JSON. A string, null or missing value used to reach a
+ * NOT NULL double column — failing the insert and losing the alert — or
+ * `toFixed` in the push body. 0 is the device's own "no GPS fix" value, so
+ * everything downstream already treats it as "location unavailable".
+ */
+function coordinate(value: unknown, deviceID: string): number {
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (typeof n === 'number' && Number.isFinite(n)) return n;
+  console.warn(
+    `Device ${deviceID} sent an unusable coordinate (${String(value)}) — storing 0, "no fix".`,
+  );
+  return 0;
+}
+
 @Injectable()
 export class RaspberryService {
   constructor(
@@ -724,8 +742,8 @@ export class RaspberryService {
 
     const alert = new AlertLog();
     alert.eventType = dto.eventType;
-    alert.latitude = dto.latitude;
-    alert.longitude = dto.longitude;
+    alert.latitude = coordinate(dto?.latitude, deviceID);
+    alert.longitude = coordinate(dto?.longitude, deviceID);
     alert.occuredAt = occuredAt.at;
     alert.assistedUser = assistedUser;
 
@@ -819,8 +837,14 @@ export class RaspberryService {
       createIntervalInformationDTO.batteryHealth;
     intervalInformation.internetStatus =
       createIntervalInformationDTO.internetStatus;
-    intervalInformation.latitude = createIntervalInformationDTO.latitude;
-    intervalInformation.longitude = createIntervalInformationDTO.longitude;
+    intervalInformation.latitude = coordinate(
+      createIntervalInformationDTO?.latitude,
+      deviceID,
+    );
+    intervalInformation.longitude = coordinate(
+      createIntervalInformationDTO?.longitude,
+      deviceID,
+    );
     intervalInformation.assistedUser = assistedUser;
 
     const queryRunner = this.dataSource.createQueryRunner();
