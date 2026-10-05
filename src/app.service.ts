@@ -476,6 +476,48 @@ const GEOCODE_TTL_MS = 60 * 60 * 1000;
 /** Cap on distinct places remembered, so the cache cannot grow without bound. */
 const GEOCODE_CACHE_MAX = 1000;
 
+/** Nominatim's policy is at most 1 request/second; a little margin on top. */
+const NOMINATIM_MIN_GAP_MS = 1100;
+
+/** A hung geocoder must not hold an alert response open indefinitely. */
+const NOMINATIM_TIMEOUT_MS = 5000;
+
+interface NominatimReverse {
+  name?: string;
+  display_name?: string;
+  address?: Record<string, string | undefined>;
+}
+
+/**
+ * A short, human place name from a Nominatim reverse result.
+ *
+ * `name` is only set when the point lands on a named feature. A house on an
+ * unnamed lot has none, but still has a road and a barangay in `address` — that
+ * is a perfectly good answer for a guardian, and better than "unavailable".
+ */
+function placeName(data: NominatimReverse): string {
+  if (data.name?.trim()) return data.name.trim();
+
+  const a = data.address ?? {};
+  // A subdivision or estate ("Transville Homes") is what a relative would
+  // recognise first; most homes here have no named road in OSM at all.
+  const street =
+    [a.house_number, a.road].filter(Boolean).join(' ') ||
+    a.residential ||
+    a.amenity ||
+    a.building;
+  const area =
+    a.neighbourhood ?? a.quarter ?? a.suburb ?? a.village ?? a.city_district;
+  const town = a.city ?? a.town ?? a.municipality;
+  const parts = [street, area, town].filter(
+    (p, i, all): p is string => !!p && all.indexOf(p) === i,
+  );
+  if (parts.length) return parts.slice(0, 2).join(', ');
+
+  const display = data.display_name?.split(',').slice(0, 2).join(',').trim();
+  return display || UNKNOWN_LOCATION;
+}
+
 @Injectable()
 export class LocationService {
   // Nominatim's usage policy is 1 request/second for the whole origin, and this
@@ -488,7 +530,23 @@ export class LocationService {
     { name: string; storedAt: number }
   >();
 
+  /** Tail of the request queue: every Nominatim call waits on the one before. */
+  private queue: Promise<unknown> = Promise.resolve();
+  private lastRequestAt = 0;
+  /** In-flight lookups by key, so concurrent callers share one request. */
+  private readonly inFlight = new Map<string, Promise<string>>();
+
   async reverseGeoCode(latitude: number, longitude: number): Promise<string> {
+    // The device reports 0,0 when it has no GPS fix. That is a point in the
+    // Gulf of Guinea, not a place worth spending a rate-limited request on.
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      (latitude === 0 && longitude === 0)
+    ) {
+      return UNKNOWN_LOCATION;
+    }
+
     const key = `${latitude.toFixed(GEOCODE_KEY_DECIMALS)},${longitude.toFixed(
       GEOCODE_KEY_DECIMALS,
     )}`;
@@ -498,35 +556,83 @@ export class LocationService {
       return hit.name;
     }
 
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=jsonv2`,
-      {
-        headers: {
-          'User-Agent': 'MyRaspberryApp/1.0 mearckfrancisvoughnlol@gmail.com',
-        },
+    const pending = this.inFlight.get(key);
+    if (pending) return pending;
+
+    const lookup = this.enqueue(() => this.lookup(latitude, longitude)).then(
+      (name) => {
+        if (name !== UNKNOWN_LOCATION) this.remember(key, name);
+        return name;
       },
     );
+    this.inFlight.set(key, lookup);
+    try {
+      return await lookup;
+    } finally {
+      this.inFlight.delete(key);
+    }
+  }
 
-    if (!response.ok) {
-      console.log(response.status);
-      // Deliberately not cached: a 429 or a blip should not pin "unavailable"
-      // to this place for the next hour.
+  /**
+   * Run `task` no sooner than NOMINATIM_MIN_GAP_MS after the previous request.
+   *
+   * The alert routes resolve several alerts at once with Promise.all, which
+   * used to fire them at Nominatim in the same instant. Past its 1 request/s
+   * policy it answers 429, every alert after the first came back as
+   * "unable to retrieve location", and the alert list showed no place even
+   * though every row had coordinates.
+   */
+  private enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(async () => {
+      const wait = this.lastRequestAt + NOMINATIM_MIN_GAP_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      try {
+        return await task();
+      } finally {
+        this.lastRequestAt = Date.now();
+      }
+    });
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async lookup(latitude: number, longitude: number): Promise<string> {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=jsonv2`,
+        {
+          headers: {
+            'User-Agent': 'MyRaspberryApp/1.0 mearckfrancisvoughnlol@gmail.com',
+          },
+          signal: AbortSignal.timeout(NOMINATIM_TIMEOUT_MS),
+        },
+      );
+
+      if (!response.ok) {
+        console.warn(
+          `Reverse geocode ${latitude},${longitude} failed: HTTP ${response.status}`,
+        );
+        // Deliberately not cached: a 429 or a blip should not pin
+        // "unavailable" to this place for the next hour.
+        return UNKNOWN_LOCATION;
+      }
+
+      return placeName((await response.json()) as NominatimReverse);
+    } catch (e) {
+      // A timeout or network error used to reject straight through to the
+      // route and fail the whole alert list over one missing place name.
+      console.warn(`Reverse geocode ${latitude},${longitude} failed:`, e);
       return UNKNOWN_LOCATION;
     }
+  }
 
-    const data = (await response.json()) as { name?: string };
-    // Nominatim omits `name` for coordinates with no named feature, which used
-    // to leak an undefined through to the client as a missing field.
-    const name = data.name ?? UNKNOWN_LOCATION;
-    if (name !== UNKNOWN_LOCATION) {
-      if (this.cache.size >= GEOCODE_CACHE_MAX) {
-        // Oldest insertion first — enough to bound the map without tracking use.
-        const oldest = this.cache.keys().next();
-        if (!oldest.done) this.cache.delete(oldest.value);
-      }
-      this.cache.set(key, { name, storedAt: Date.now() });
+  private remember(key: string, name: string) {
+    if (this.cache.size >= GEOCODE_CACHE_MAX) {
+      // Oldest insertion first — enough to bound the map without tracking use.
+      const oldest = this.cache.keys().next();
+      if (!oldest.done) this.cache.delete(oldest.value);
     }
-    return name;
+    this.cache.set(key, { name, storedAt: Date.now() });
   }
 }
 
