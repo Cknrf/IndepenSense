@@ -12,6 +12,7 @@ export enum EventType {
   FALL = 'Fall Detection',
   BATTERY = 'Low Battery',
   CONNECTIVITY = 'Connectivity',
+  USER_STATUS_OK = 'User Status OK',
 }
 
 @Entity()
